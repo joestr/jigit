@@ -14,7 +14,7 @@ struct results
 {
     struct results *next;
     struct results *prev;
-    db_entry_t entry;
+    db_file_entry_t entry;
 };
 
 struct results *res_head = NULL;
@@ -117,7 +117,7 @@ int db_close(JIGDB *dbp)
     return 0;
 }
 
-int db_store(JIGDB *dbp, db_entry_t *entry)
+int db_store_file(JIGDB *dbp, db_file_entry_t *entry)
 {
     int error = 0;
     db_state_t *state = dbp;
@@ -129,7 +129,7 @@ int db_store(JIGDB *dbp, db_entry_t *entry)
     error = sqlite3_exec(state->db, sql_command, NULL, NULL, &open_error);
     if (error)
     {
-        fprintf(stderr, "db_store: Failed to write entry, error %d (%s)\n", error, open_error);
+        fprintf(stderr, "db_store_file: Failed to write entry, error %d (%s)\n", error, open_error);
         if (open_error)
             sqlite3_free(open_error);
         return error;
@@ -184,7 +184,7 @@ static int results_callback(void *pArg, int argc, char **argv, char **columnName
 
 /* Look up the most recent record that is older than the specified
  * age */
-int db_lookup_by_age(JIGDB *dbp, time_t age, db_entry_t **out)
+int db_lookup_file_by_age(JIGDB *dbp, time_t age, db_file_entry_t **out)
 {
     int error = 0;
     db_state_t *state = dbp;
@@ -196,7 +196,7 @@ int db_lookup_by_age(JIGDB *dbp, time_t age, db_entry_t **out)
     error = sqlite3_exec(state->db, sql_command, results_callback, NULL, &open_error);
     if (error)
     {
-        fprintf(stderr, "db_lookup_by_age: Failed to lookup, error %d (%s)\n", error, open_error);
+        fprintf(stderr, "db_lookup_file_by_age: Failed to lookup, error %d (%s)\n", error, open_error);
         return error;
     }
 
@@ -213,7 +213,7 @@ int db_lookup_by_age(JIGDB *dbp, time_t age, db_entry_t **out)
 }
 
 /* Look up the next oldest record */
-int db_lookup_older(JIGDB *dbp, db_entry_t **out)
+int db_lookup_file_older(JIGDB *dbp, db_file_entry_t **out)
 {
     int error = 0;
 
@@ -231,7 +231,7 @@ int db_lookup_older(JIGDB *dbp, db_entry_t **out)
     return error;
 }
 
-int db_lookup_by_md5(JIGDB *dbp, char *md5, db_entry_t **out)
+int db_lookup_file_by_md5(JIGDB *dbp, char *md5, db_file_entry_t **out)
 {
     int error = 0;
     db_state_t *state = dbp;
@@ -243,7 +243,7 @@ int db_lookup_by_md5(JIGDB *dbp, char *md5, db_entry_t **out)
     error = sqlite3_exec(state->db, sql_command, results_callback, NULL, &open_error);
     if (error)
     {
-        fprintf(stderr, "db_lookup_by_md5: Failed to lookup, error %d (%s)\n", error, open_error);
+        fprintf(stderr, "db_lookup_file_by_md5: Failed to lookup, error %d (%s)\n", error, open_error);
         return error;
     }
 
@@ -259,7 +259,7 @@ int db_lookup_by_md5(JIGDB *dbp, char *md5, db_entry_t **out)
     return error;
 }
 
-int db_lookup_by_name(JIGDB *dbp, char *filename, db_entry_t **out)
+int db_lookup_file_by_name(JIGDB *dbp, char *filename, db_file_entry_t **out)
 {
     int error = 0;
     db_state_t *state = dbp;
@@ -271,7 +271,7 @@ int db_lookup_by_name(JIGDB *dbp, char *filename, db_entry_t **out)
     error = sqlite3_exec(state->db, sql_command, results_callback, NULL, &open_error);
     if (error)
     {
-        fprintf(stderr, "db_lookup_by_name: Failed to lookup, error %d (%s)\n", error, open_error);
+        fprintf(stderr, "db_lookup_file_by_name: Failed to lookup, error %d (%s)\n", error, open_error);
         return error;
     }
 
@@ -287,7 +287,7 @@ int db_lookup_by_name(JIGDB *dbp, char *filename, db_entry_t **out)
     return error;
 }
 
-int db_delete(JIGDB *dbp, char *md5, enum filetype type, char *filename)
+int db_delete_file(JIGDB *dbp, char *md5, enum filetype type, char *filename)
 {
     int error = 0;
     db_state_t *state = dbp;
@@ -296,7 +296,7 @@ int db_delete(JIGDB *dbp, char *md5, enum filetype type, char *filename)
     sprintf(sql_command, "DELETE FROM files WHERE md5 == '%s' AND type == '%d' AND filename == '%s';", md5, type, filename);
     error = sqlite3_exec(state->db, sql_command, NULL, NULL, &open_error);
     if (error)
-        fprintf(stderr, "db_delete: Failed to delete, error %d (%s)\n", error, open_error);
+        fprintf(stderr, "db_delete_file: Failed to delete, error %d (%s)\n", error, open_error);
 
     return error;
 }
@@ -305,7 +305,7 @@ int db_dump(JIGDB *dbp)
 {
     int error = 0;
 /*    int num_records = 0;
-    db_entry_t *entry = NULL;
+    db_file_entry_t *entry = NULL;
     db_state_t *state = dbp; */
 
     return error;

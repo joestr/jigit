@@ -751,7 +751,7 @@ static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size, JIGD
     struct mk_MD5Context *use_context = NULL;
     unsigned char file_md5[16];
     md5_list_t *md5_list_entry = NULL;
-    db_entry_t *db_entry = NULL;
+    db_file_entry_t *db_entry = NULL;
     int error = 0;
     char *filename = NULL;
 
@@ -764,7 +764,7 @@ static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size, JIGD
     /* Try the DB first if we have one */
     if (dbp)
     {
-        error = db_lookup_by_md5(dbp, base64_md5, &db_entry);
+        error = db_lookup_file_by_md5(dbp, base64_md5, &db_entry);
         if (!error)
             filename = db_entry->filename;
     }

@@ -31,9 +31,9 @@ JIGDB *database = NULL;
 static int check_cache(char *filename, struct stat *sb, char **base64_md5)
 {
     int error = 0;
-    db_entry_t *entry;
+    db_file_entry_t *entry;
 
-    error = db_lookup_by_name(database, filename, &entry);
+    error = db_lookup_file_by_name(database, filename, &entry);
     if (!error)
     {
         if ( (sb->st_mtime <= entry->mtime) &&
@@ -49,7 +49,7 @@ static int check_cache(char *filename, struct stat *sb, char **base64_md5)
             /* We have an entry for this file, but the mtime or size
              * has changed. Delete the old entry and replace it later
              * on */
-            error = db_delete(database, entry->md5, entry->type, entry->filename);
+            error = db_delete_file(database, entry->md5, entry->type, entry->filename);
             if (error)
                 printf("check_cache: unable to delete old entry for file %s\n", filename);
         }
@@ -93,7 +93,7 @@ static int md5_file(char *filename)
     FILE *file = NULL;
     char *base64_md5 = NULL;
     unsigned long long bytes_read = 0;
-    db_entry_t entry;
+    db_file_entry_t entry;
     struct stat sb;
     int found_in_db = 0;
     int error = 0;
@@ -163,7 +163,7 @@ static int md5_file(char *filename)
         entry.file_size = bytes_read;
         strncpy(&entry.filename[0], fullpath, sizeof(entry.filename));
         /* "extra" blanked already */
-        error = db_store(database, &entry);
+        error = db_store_file(database, &entry);
         if (error)
             fprintf(stderr, "Unable to write database entry; error %d\n", error);
     }
@@ -178,16 +178,16 @@ static void jigsum_db_cleanup(int delay)
 {
     time_t delete_time = UINT_MAX - time(NULL);
     int error = 0;
-    db_entry_t *entry = NULL;
+    db_file_entry_t *entry = NULL;
 
     delete_time += delay;
 
     while (!error)
     {
-        error = db_lookup_by_age(database, delete_time, &entry);
+        error = db_lookup_file_by_age(database, delete_time, &entry);
         if (error)
             break;
-        error = db_delete(database, entry->md5, entry->type, entry->filename);
+        error = db_delete_file(database, entry->md5, entry->type, entry->filename);
         if (error)
         {
             printf("jigsum_db_cleanup: error %d from delete call\n", error);

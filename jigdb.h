@@ -25,16 +25,16 @@ typedef struct
     char               extra[PATH_MAX];    /* empty for local files;
                                             * path to ISO for local ISO loopbacks;
                                             * base URL for remote files*/
-} db_entry_t;    
+} db_file_entry_t;    
 
 JIGDB *db_open(char *db_name);
 int db_close(JIGDB *dbp);
-int db_store(JIGDB *dbp, db_entry_t *entry);
-int db_lookup_by_age(JIGDB *dbp, time_t added, db_entry_t **out);
-int db_lookup_older(JIGDB *dbp, db_entry_t **out);
-int db_lookup_by_md5(JIGDB *dbp, char *md5, db_entry_t **out);
-int db_lookup_by_name(JIGDB *dbp, char *filename, db_entry_t **out);
-int db_delete(JIGDB *dbp, char *md5, enum filetype type, char *filename);
+int db_store_file(JIGDB *dbp, db_file_entry_t *entry);
+int db_lookup_file_by_age(JIGDB *dbp, time_t added, db_file_entry_t **out);
+int db_lookup_file_older(JIGDB *dbp, db_file_entry_t **out);
+int db_lookup_file_by_md5(JIGDB *dbp, char *md5, db_file_entry_t **out);
+int db_lookup_file_by_name(JIGDB *dbp, char *filename, db_file_entry_t **out);
+int db_delete_file(JIGDB *dbp, char *md5, enum filetype type, char *filename);
 int db_dump(JIGDB *dbp);
 
 #endif /* JIGDB_H */
