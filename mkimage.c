@@ -27,6 +27,7 @@
 #include <sys/mman.h>
 #include "endian.h"
 #include "md5.h"
+#include "jigdb.h"
 
 typedef long long INT64;
 typedef unsigned long long UINT64;
@@ -679,91 +680,130 @@ static int parse_data_block(INT64 data_size, FILE *template_file,
     return error;
 }
 
-static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size, 
+static int read_file_data(char *filename, char *missing, INT64 offset, INT64 data_size,
+                          struct mk_MD5Context *file_context, struct mk_MD5Context *image_context)
+{
+    FILE *input_file = NULL;
+    INT64 remaining = data_size;
+    char buf[BUF_SIZE];
+    int num_read = 0;
+    int out_size = 0;
+
+    input_file = fopen(filename, "rb");
+    if (!input_file)
+    {
+        fprintf(logfile, "Unable to open mirror file %s, error %d\n",
+                filename, errno);
+        return errno;
+    }
+
+    if (missing)
+    {
+        fclose(input_file);
+        return 0;
+    }
+    
+    fseek(input_file, offset, SEEK_SET);
+    while (remaining)
+    {
+        int size = MIN(BUF_SIZE, remaining);
+        memset(buf, 0, BUF_SIZE);
+        
+        num_read = fread(buf, size, 1, input_file);
+        if (!num_read)
+        {
+            fprintf(logfile, "Unable to read from mirror file %s, error %d (offset %ld, length %d)\n",
+                    filename, errno, ftell(input_file), size);
+            fclose(input_file);
+            return errno;
+        }
+        if (file_context)
+        {
+            mk_MD5Update(image_context, (unsigned char *)buf, size);
+            mk_MD5Update(file_context, (unsigned char *)buf, size);
+        }
+        
+        out_size = fwrite(buf, size, 1, outfile);
+        if (!out_size)
+        {
+            fprintf(logfile, "read_file_data: fwrite %d failed with error %d; aborting\n", size, ferror(outfile));
+            return ferror(outfile);
+        }
+        
+        if (verbose)
+            display_progress(outfile, file_base_name(filename));
+        
+        remaining -= size;
+    }
+    if (verbose > 1)
+        fprintf(logfile, "read_file_data: wrote %lld bytes of data from %s\n",
+                data_size, filename);
+    fclose(input_file);
+    return 0;
+}
+
+static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size, JIGDB *dbp,
                             unsigned char *md5, struct mk_MD5Context *image_context,
                             char *missing)
 {
     char *base64_md5 = base64_dump(md5, 16);
-    FILE *input_file = NULL;
-    char buf[BUF_SIZE];
-    INT64 remaining = data_size;
-    int num_read = 0;
     struct mk_MD5Context file_context;
+    struct mk_MD5Context *use_context = NULL;
     unsigned char file_md5[16];
-    int out_size = 0;
     md5_list_t *md5_list_entry = NULL;
-    
-    if (!quick)
-        mk_MD5Init(&file_context);
+    db_entry_t *db_entry = NULL;
+    int error = 0;
+    char *filename = NULL;
 
-    md5_list_entry = find_file_in_md5_list(base64_md5);
-    if (md5_list_entry && file_size == md5_list_entry->file_size)
+    if (!quick)
     {
-        input_file = fopen(md5_list_entry->full_path, "rb");
-        if (!input_file)
-        {
-            fprintf(logfile, "Unable to open mirror file %s, error %d\n",
-                    md5_list_entry->full_path, errno);
-            return errno;
-        }
+        use_context = &file_context;
+        mk_MD5Init(use_context);
+    }
+
+    /* Try the DB first if we have one */
+    if (dbp)
+    {
+        error = db_lookup_by_md5(dbp, base64_md5, &db_entry);
+        if (!error)
+            filename = db_entry->filename;
+    }
+
+    /* No joy; fall back to the MD5 list */
+    if (!filename)
+    {
+        md5_list_entry = find_file_in_md5_list(base64_md5);
+        if (md5_list_entry && file_size == md5_list_entry->file_size)
+            filename = md5_list_entry->full_path;
+    }
+
+    if (filename)
+    {
+        error = read_file_data(filename, missing, offset, data_size,
+                               use_context, image_context);
         
-        if (missing)
+        if (error && (ENOENT != error))
         {
-            fclose(input_file);
-            return 0;
+            fprintf(logfile, "Failed to read file %s, error %d\n", filename, error);
+            return error;
         }
-        
-        fseek(input_file, offset, SEEK_SET);
-        while (remaining)
-        {
-            int size = MIN(BUF_SIZE, remaining);
-            memset(buf, 0, BUF_SIZE);
-            
-            num_read = fread(buf, size, 1, input_file);
-            if (!num_read)
-            {
-                fprintf(logfile, "Unable to read from mirror file %s, error %d (offset %ld, length %d)\n",
-                        md5_list_entry->full_path, errno, ftell(input_file), size);
-                fclose(input_file);
-                return errno;
-            }
-            if (!quick)
-            {
-                mk_MD5Update(image_context, (unsigned char *)buf, size);
-                mk_MD5Update(&file_context, (unsigned char *)buf, size);
-            }
-            
-            out_size = fwrite(buf, size, 1, outfile);
-            if (!out_size)
-            {
-                fprintf(logfile, "parse_file_block: fwrite %d failed with error %d; aborting\n", size, ferror(outfile));
-                return ferror(outfile);
-            }
-            
-            if (verbose)
-                display_progress(outfile, file_base_name(md5_list_entry->full_path));
-            
-            remaining -= size;
-        }
-        if (verbose > 1)
-            fprintf(logfile, "parse_file_block: wrote %lld bytes of data from %s\n",
-                    file_size, md5_list_entry->full_path);
-        fclose(input_file);
         
         if (!quick)
         {
             mk_MD5Final(file_md5, &file_context);
-        
+            
             if (memcmp(file_md5, md5, 16))
             {
-                fprintf(logfile, "MD5 MISMATCH for file %s\n", md5_list_entry->full_path);
+                fprintf(logfile, "MD5 MISMATCH for file %s\n", filename);
                 fprintf(logfile, "    template looking for %s\n", md5);
-                fprintf(logfile, "    file in mirror is    %s\n", file_md5);
+                fprintf(logfile, "    file %s is    %s\n", filename, file_md5);
                 return EINVAL;
             }
         }
         return 0;
     }
+    
+    /* No file found. Add it to the list of missing files, or complain */
     if ( missing &&
          (MISSING == md5_list_entry->file_size) &&
          (!memcmp(md5_list_entry->md5, base64_md5, 16) ) )
@@ -775,7 +815,8 @@ static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size,
     return ENOENT;
 }
 
-static int parse_template_file(char *filename, int sizeonly, char *missing, char *output_name)
+static int parse_template_file(char *filename, int sizeonly,
+                               char *missing, char *output_name, char *db_filename)
 {
     INT64 template_offset = 0;
     INT64 bytes = 0;
@@ -789,6 +830,7 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
     int error = 0;
     struct mk_MD5Context template_context;
     unsigned char image_md5sum[16];
+    JIGDB *dbp = NULL;
 
     zip_state.total_offset = 0;
     
@@ -797,6 +839,16 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
     {
         fprintf(logfile, "Failed to open template file %s, error %d!\n", filename, errno);
         return errno;
+    }
+
+    if (db_filename)
+    {
+        dbp = db_open(db_filename);
+        if (!dbp)
+        {
+            fprintf(logfile, "Failed to open DB file %s, error %d\n", db_filename, errno);
+            return errno;
+        }
     }
 
     buf = malloc(BUF_SIZE);
@@ -939,7 +991,8 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
                 template_offset += 31;
                 if ((output_offset + extent_size) >= start_offset)
                 {
-                    error = parse_file_block(skip, read_length, extent_size, (unsigned char *)&buf[15], &template_context, missing);
+                    error = parse_file_block(skip, read_length, extent_size, dbp,
+                                             (unsigned char *)&buf[15], &template_context, missing);
                     if (error)
                     {
                         fprintf(logfile, "Unable to read file block, error %d\n", error);
@@ -982,22 +1035,23 @@ static void usage(char *progname)
 {
     printf("%s [OPTIONS]\n\n", progname);
     printf(" Options:\n");
-    printf(" -f <MD5 name>       Specify an input MD5 file. MD5s must be in jigdo's\n");
-	printf("                     pseudo-base64 format\n");
-    printf(" -j <jigdo name>     Specify the input jigdo file\n");
-    printf(" -t <template name>  Specify the input template file\n");
-    printf(" -m <item=path>      Map <item> to <path> to find the files in the mirror\n");
 	printf(" -M <missing name>   Rather than try to build the image, just check that\n");
 	printf("                     all the needed files are available. If any are missing,\n");
 	printf("                     list them in this file.\n");
-	printf(" -v                  Make the output logging more verbose\n");
+    printf(" -d <DB name>        Specify an input MD5 database file, as created by jigsum\n");
+    printf(" -e <bytenum>        End byte number; will end at EOF if not specified\n");    
+    printf(" -f <MD5 name>       Specify an input MD5 file. MD5s must be in jigdo's\n");
+	printf("                     pseudo-base64 format\n");
+    printf(" -j <jigdo name>     Specify the input jigdo file\n");
     printf(" -l <logfile>        Specify a logfile to append to.\n");
     printf("                     If not specified, will log to stderr\n");
+    printf(" -m <item=path>      Map <item> to <path> to find the files in the mirror\n");
     printf(" -o <outfile>        Specify a file to write the ISO image to.\n");
     printf("                     If not specified, will write to stdout\n");
     printf(" -q                  Quick mode. Don't check MD5sums. Dangerous!\n");
     printf(" -s <bytenum>        Start byte number; will start at 0 if not specified\n");
-    printf(" -e <bytenum>        End byte number; will end at EOF if not specified\n");    
+    printf(" -t <template name>  Specify the input template file\n");
+	printf(" -v                  Make the output logging more verbose\n");
     printf(" -z                  Don't attempt to rebuild the image; simply print its\n");
     printf("                     size in bytes\n");
 }
@@ -1008,6 +1062,7 @@ int main(int argc, char **argv)
     char *jigdo_filename = NULL;
     char *md5_filename = NULL;
     char *output_name = NULL;
+    char *db_filename = NULL;
     int c = -1;
     int error = 0;
     int sizeonly = 0;
@@ -1019,7 +1074,7 @@ int main(int argc, char **argv)
 
     while(1)
     {
-        c = getopt(argc, argv, ":ql:o:j:t:f:m:M:h?s:e:zv");
+        c = getopt(argc, argv, ":?M:d:e:f:h:j:l:m:o:qs:t:vz");
         if (-1 == c)
             break;
         
@@ -1076,6 +1131,15 @@ int main(int argc, char **argv)
                 /* else */
                 md5_filename = optarg;
                 break;                
+            case 'd':
+                if (db_filename)
+                {
+                    fprintf(logfile, "Can only specify one db file!\n");
+                    return EINVAL;
+                }
+                /* else */
+                db_filename = optarg;
+                break;                
             case 'm':
                 error = add_match_entry(strdup(optarg));
                 if (error)
@@ -1117,9 +1181,10 @@ int main(int argc, char **argv)
 
     if ((NULL == jigdo_filename) &&
         (NULL == md5_filename) && 
+        (NULL == db_filename) && 
         !sizeonly)
     {
-        fprintf(logfile, "No jigdo file or MD5 file specified!\n");
+        fprintf(logfile, "No jigdo file, DB file or MD5 file specified!\n");
         usage(argv[0]);
         return EINVAL;
     }
@@ -1156,7 +1221,8 @@ int main(int argc, char **argv)
     if (!output_name)
         output_name = "to stdout";
     /* Read the template file and actually build the image to <outfile> */
-    error = parse_template_file(template_filename, sizeonly, missing_filename, output_name);
+    error = parse_template_file(template_filename, sizeonly,
+                                missing_filename, output_name, db_filename);
     if (error)
     {
         fprintf(logfile, "Unable to recreate image from template file %s\n", template_filename);
