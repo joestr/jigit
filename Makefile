@@ -4,11 +4,11 @@ CFLAGS = -g -Wall -Werror -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFIL
 
 all: $(BINS)
 
-DB_OBJ=jigdb-db.o
-DBLIB=-ldb
+#DB_OBJ=jigdb-db.o
+#DBLIB=-ldb
 
-#DB_OBJ=jigdb-sql.o
-#DBLIB=-lsqlite
+DB_OBJ=jigdb-sql.o
+DBLIB=-lsqlite3
 
 mkimage: mkimage.o endian.o md5.o $(DB_OBJ)
 	$(CC) -o $@ $+ -lz $(DBLIB)
