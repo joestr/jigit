@@ -1,7 +1,7 @@
-README for JTE 1.5
+README for JTE 1.7
 
 Steve McIntyre <steve@einval.com>
-05 Jul 2004
+19 Aug 2004
 
 JTE - Jigdo Template Export
 ===========================
@@ -217,19 +217,21 @@ various paths in the script:
 
 ----------------------------------------------------------------------
 
+Debian-cd integration
+
+I've branched debian-cd in CVS to add JTE support - use the
+jte_support branch. There have been some more changes in HEAD since
+that point, so I also have a more recent diff available - see
+debian-cd.20040818.diff.gz. Let me know if you have any problems...
+
+----------------------------------------------------------------------
+
 What's left to do?
 
- 1. Updates to debian-cd to use the new code in production instead of
-    jigdo-file.
-    Updated 2004/07/14: Done: use the jte_support branch in debian-cd
-    CVS if you want to use this.
- 2. Work out why HFS hybrid images are too big.
-    Updated 2004/07/14: This seems to be purely the space needed for the
-    HFS information. I've checked a fix into debian-cd to fix it.
- 3. Testing! :-) This is where you lot come in! Please play with this some more
+ 1. Testing! :-) This is where you lot come in! Please play with this some more
     and let me know if you have any problems, especially with data corruption.
- 4. More documentation.
- 5. Push patches upstream. This may take a while...
+ 2. More documentation.
+ 3. Push patches upstream. This may take a while...
 
 I hope people find this useful - at the moment I shudder at the thought of
 releasing sarge (10+ CDs, netinst, business card, 2 DVDs per arch) without
