@@ -54,7 +54,8 @@ wget $WGET_OPTS --mirror $URL/$JIGDO
 echo "Downloading template: $URL/$TEMPLATE"
 wget $WGET_OPTS --mirror $URL/$TEMPLATE
 
-echo "If you have any previous CD or CD image(s) available, where are they mounted?"
+echo "If you have a mirror, or any previous CD or CD image(s) available,"
+echo "where are they mounted?"
 echo "Say \"none\" if you have none; separate multiple entries with spaces"
 read -p "> [none] " CD
 if [ "$CD"x = ""x ] ; then
