@@ -1,3 +1,13 @@
+/*
+ * jigdump
+ *
+ * Tool to dump the contents of a jigdo template file
+ *
+ * Copyright (c) 2004 Steve McIntyre <steve@einval.com>
+ *
+ * GPL v2 - see COPYING
+ */
+
 #include <errno.h>
 #include <math.h>
 #include <stdlib.h>

@@ -1,3 +1,14 @@
+/*
+ * jigsum
+ *
+ * Tool to calculate and print MD5 checksums in jigdo's awkward
+ * base64-ish encoding.
+ *
+ * Copyright (c) 2004 Steve McIntyre <steve@einval.com>
+ *
+ * GPL v2 - see COPYING
+ */
+
 #include <stdio.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -56,7 +67,7 @@ static int md5_file(char *filename)
         used = fread(buf, 1, BUF_SIZE, file);
         bytes_read += used;
         if (used)
-            mk_MD5Update(&file_context, buf, used);
+            mk_MD5Update(&file_context, (unsigned char *)buf, used);
         else
         {
             if (ferror(file) && (EISDIR != errno))

@@ -1,3 +1,13 @@
+/*
+ * mkimage
+ *
+ * Tool to create an ISO image from jigdo files
+ *
+ * Copyright (c) 2004 Steve McIntyre <steve@einval.com>
+ *
+ * GPL v2 - see COPYING
+ */
+
 #undef BZ2_SUPPORT
 
 #include <errno.h>
@@ -44,6 +54,7 @@ long long end_offset = 0;
 int quick = 0;
 int verbose = 0;
 UINT64 out_size = 0;
+char *missing_filename = NULL;
 
 typedef enum state_
 {
@@ -79,7 +90,7 @@ md5_list_t *md5_list_tail = NULL;
 struct
 {
     char   *data_buf;
-    INT64  buf_size;
+    INT64   buf_size;
     INT64   offset_in_curr_buf;
     INT64   total_offset;
 } zip_state;
@@ -198,42 +209,25 @@ static int file_exists(char *path, INT64 *size)
     return 0;
 }
 
-static int find_file_in_mirror(char *jigdo_entry, char **mirror_path, char **md5sum, INT64 *file_size)
+static md5_list_t *find_file_in_md5_list(unsigned char *base64_md5)
+{
+    md5_list_t *md5_list_entry = md5_list_head;
+    
+    while (md5_list_entry)
+    {        
+        if (!memcmp(md5_list_entry->md5, base64_md5, 16))
+            return md5_list_entry;
+        /* else */
+        md5_list_entry = md5_list_entry->next;
+    }
+    return NULL; /* Not found */
+}
+
+static int find_file_in_mirror(char *jigdo_match, char *jigdo_name,
+                               char *match, INT64 *file_size, char **mirror_path)
 {
     match_list_t *entry = match_list_head;
     char path[PATH_MAX];
-    char *jigdo_name = NULL;
-    char *match = NULL;
-    char *ptr = jigdo_entry;
-
-    *md5sum = jigdo_entry;
-
-    /* Grab out the component strings from the entry in the jigdo file */
-    while (0 != *ptr)
-    {
-        if ('=' == *ptr)
-        {
-            *ptr = 0;
-            ptr++;
-            match = ptr;
-        }
-        else if (':' == *ptr)
-        {
-            *ptr = 0;
-            ptr++;
-            jigdo_name = ptr;
-        }
-        else if ('\n' == *ptr)
-            *ptr = 0;
-        else
-            ptr++;
-    }
-
-    if (NULL == match || NULL == jigdo_name)
-    {
-        fprintf(logfile, "Could not parse malformed jigdo entry \"%s\"\n", jigdo_entry);
-        return EINVAL;
-    }
 
     while (entry)
     {
@@ -303,7 +297,7 @@ static int parse_md5_entry(char *md5_entry)
 
 static int parse_md5_file(char *filename)
 {
-    unsigned char buf[2048];
+    char buf[2048];
     FILE *file = NULL;
     char *ret = NULL;
     int error = 0;
@@ -333,21 +327,65 @@ static int add_file_entry(char *jigdo_entry)
 {
     int error = 0;
     char *file_name = NULL;
-    char *md5 = NULL;
     INT64 file_size = 0;
+    char *ptr = jigdo_entry;
+    char *base64_md5 = NULL;
+    char *match = NULL;
+    char *jigdo_name = NULL;
     
-    error = find_file_in_mirror(jigdo_entry, &file_name, &md5, &file_size);
+    /* Grab out the component strings from the entry in the jigdo file */
+    base64_md5 = jigdo_entry;
+    while (0 != *ptr)
+    {
+        if ('=' == *ptr)
+        {
+            *ptr = 0;
+            ptr++;
+            match = ptr;
+        }
+        else if (':' == *ptr)
+        {
+            *ptr = 0;
+            ptr++;
+            jigdo_name = ptr;
+        }
+        else if ('\n' == *ptr)
+            *ptr = 0;
+        else
+            ptr++;
+    }
+
+    if (find_file_in_md5_list(base64_md5))
+        return 0; /* We already have an entry for this file; don't
+                   * waste any more time on it */
+
+    /* else look for the file in the filesystem */
+    if (NULL == match || NULL == jigdo_name)
+    {
+        fprintf(logfile, "Could not parse malformed jigdo entry \"%s\"\n", jigdo_entry);
+        return EINVAL;
+    }
+    error = find_file_in_mirror(match, jigdo_name, match, &file_size, &file_name);
 
     if (error)
-        add_md5_entry(MISSING, md5, file_name);
+	{
+		if (missing_filename)
+			add_md5_entry(MISSING, base64_md5, file_name);
+		else
+		{
+			fprintf(logfile, "Unable to find a file to match %s\n", file_name);
+			fprintf(logfile, "Abort!\n");
+			exit (ENOENT);
+		}
+	}
     else
-        add_md5_entry(file_size, md5, file_name);
+        add_md5_entry(file_size, base64_md5, file_name);
     return 0;
 }
 
 static int parse_jigdo_file(char *filename)
 {
-    unsigned char buf[2048];
+    char buf[2048];
     gzFile *file = NULL;
     char *ret = NULL;
     int error = 0;
@@ -394,7 +432,7 @@ static int ungzip_data_block(char *in_buf, INT64 in_len, char *out_buf, INT64 ou
     uc_stream.zalloc = NULL;
     uc_stream.zfree = NULL;
     uc_stream.opaque = NULL;
-    uc_stream.next_in = in_buf;
+    uc_stream.next_in = (unsigned char *)in_buf;
     uc_stream.avail_in = in_len;
 
     error = inflateInit(&uc_stream);
@@ -404,7 +442,7 @@ static int ungzip_data_block(char *in_buf, INT64 in_len, char *out_buf, INT64 ou
         return EIO;
     }
     
-    uc_stream.next_out = out_buf;
+    uc_stream.next_out = (unsigned char *)out_buf;
     uc_stream.avail_out = out_len;
 
     error = inflate(&uc_stream, Z_FINISH);
@@ -515,8 +553,8 @@ static int read_data_block(FILE *template_file, int compress_type)
         return EINVAL;
     }    
     
-    compressed_len = read_le48(&inbuf[4]);
-    uncompressed_len = read_le48(&inbuf[10]);
+    compressed_len = read_le48((unsigned char *)&inbuf[4]);
+    uncompressed_len = read_le48((unsigned char *)&inbuf[10]);
 
     comp_buf = calloc(1, compressed_len);
     if (!comp_buf)
@@ -624,7 +662,9 @@ static int parse_data_block(INT64 data_size, FILE *template_file,
             display_progress(outfile, "template data");
 
         if (!quick)
-            mk_MD5Update(context, &zip_state.data_buf[zip_state.offset_in_curr_buf], size);
+            mk_MD5Update(context,
+						 (unsigned char *)&zip_state.data_buf[zip_state.offset_in_curr_buf],
+						 size);
         zip_state.offset_in_curr_buf += size;
         remaining -= size;
         
@@ -640,7 +680,7 @@ static int parse_data_block(INT64 data_size, FILE *template_file,
 }
 
 static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size, 
-                            char *md5, struct mk_MD5Context *image_context,
+                            unsigned char *md5, struct mk_MD5Context *image_context,
                             char *missing)
 {
     char *base64_md5 = base64_dump(md5, 16);
@@ -649,92 +689,89 @@ static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size,
     INT64 remaining = data_size;
     int num_read = 0;
     struct mk_MD5Context file_context;
-    char file_md5[16];
-    md5_list_t *md5_list_current = md5_list_head;
+    unsigned char file_md5[16];
     int out_size = 0;
+    md5_list_t *md5_list_entry = NULL;
     
     if (!quick)
         mk_MD5Init(&file_context);
 
-    while (md5_list_current)
-    {        
-        if ( (md5_list_current->file_size == file_size) &&
-             (!memcmp(md5_list_current->md5, base64_md5, 16) ) )
+    md5_list_entry = find_file_in_md5_list(base64_md5);
+    if (md5_list_entry && file_size == md5_list_entry->file_size)
+    {
+        input_file = fopen(md5_list_entry->full_path, "rb");
+        if (!input_file)
         {
-            input_file = fopen(md5_list_current->full_path, "rb");
-            if (!input_file)
+            fprintf(logfile, "Unable to open mirror file %s, error %d\n",
+                    md5_list_entry->full_path, errno);
+            return errno;
+        }
+        
+        if (missing)
+        {
+            fclose(input_file);
+            return 0;
+        }
+        
+        fseek(input_file, offset, SEEK_SET);
+        while (remaining)
+        {
+            int size = MIN(BUF_SIZE, remaining);
+            memset(buf, 0, BUF_SIZE);
+            
+            num_read = fread(buf, size, 1, input_file);
+            if (!num_read)
             {
-                fprintf(logfile, "Unable to open mirror file %s, error %d\n",
-                        md5_list_current->full_path, errno);
+                fprintf(logfile, "Unable to read from mirror file %s, error %d (offset %ld, length %d)\n",
+                        md5_list_entry->full_path, errno, ftell(input_file), size);
+                fclose(input_file);
                 return errno;
             }
-
-            if (missing)
-            {
-                fclose(input_file);
-                return 0;
-            }
-            
-            fseek(input_file, offset, SEEK_SET);
-            while (remaining)
-            {
-                int size = MIN(BUF_SIZE, remaining);
-                memset(buf, 0, BUF_SIZE);
-
-                num_read = fread(buf, size, 1, input_file);
-                if (!num_read)
-                {
-                    fprintf(logfile, "Unable to read from mirror file %s, error %d (offset %ld, length %d)\n",
-                            md5_list_current->full_path, errno, ftell(input_file), size);
-                    fclose(input_file);
-                    return errno;
-                }
-                if (!quick)
-                {
-                    mk_MD5Update(image_context, buf, size);
-                    mk_MD5Update(&file_context, buf, size);
-                }
-            
-                out_size = fwrite(buf, size, 1, outfile);
-                if (!out_size)
-                {
-                    fprintf(logfile, "parse_file_block: fwrite %d failed with error %d; aborting\n", size, ferror(outfile));
-                    return ferror(outfile);
-                }
-            
-                if (verbose)
-                    display_progress(outfile, file_base_name(md5_list_current->full_path));
-
-                remaining -= size;
-            }
-            if (verbose > 1)
-                fprintf(logfile, "parse_file_block: wrote %lld bytes of data from %s\n",
-                    file_size, md5_list_current->full_path);
-            fclose(input_file);
-
             if (!quick)
             {
-                mk_MD5Final(file_md5, &file_context);
-        
-                if (memcmp(file_md5, md5, 16))
-                {
-                    fprintf(logfile, "MD5 MISMATCH for file %s\n", md5_list_current->full_path);
-                    fprintf(logfile, "    template looking for %s\n", md5);
-                    fprintf(logfile, "    file in mirror is    %s\n", file_md5);
-                    return EINVAL;
-                }
+                mk_MD5Update(image_context, (unsigned char *)buf, size);
+                mk_MD5Update(&file_context, (unsigned char *)buf, size);
             }
-            return 0;
+            
+            out_size = fwrite(buf, size, 1, outfile);
+            if (!out_size)
+            {
+                fprintf(logfile, "parse_file_block: fwrite %d failed with error %d; aborting\n", size, ferror(outfile));
+                return ferror(outfile);
+            }
+            
+            if (verbose)
+                display_progress(outfile, file_base_name(md5_list_entry->full_path));
+            
+            remaining -= size;
         }
-        if ( missing &&
-             (MISSING == md5_list_current->file_size) &&
-             (!memcmp(md5_list_current->md5, base64_md5, 16) ) )
+        if (verbose > 1)
+            fprintf(logfile, "parse_file_block: wrote %lld bytes of data from %s\n",
+                    file_size, md5_list_entry->full_path);
+        fclose(input_file);
+        
+        if (!quick)
         {
-            write_missing_entry(missing, md5_list_current->full_path);
-            return 0;
+            mk_MD5Final(file_md5, &file_context);
+        
+            if (memcmp(file_md5, md5, 16))
+            {
+                fprintf(logfile, "MD5 MISMATCH for file %s\n", md5_list_entry->full_path);
+                fprintf(logfile, "    template looking for %s\n", md5);
+                fprintf(logfile, "    file in mirror is    %s\n", file_md5);
+                return EINVAL;
+            }
         }
-        md5_list_current = md5_list_current->next;
+        return 0;
     }
+    if ( missing &&
+         (MISSING == md5_list_entry->file_size) &&
+         (!memcmp(md5_list_entry->md5, base64_md5, 16) ) )
+    {
+        write_missing_entry(missing, md5_list_entry->full_path);
+        return 0;
+    }
+    /* else */
     return ENOENT;
 }
 
@@ -742,7 +779,7 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
 {
     INT64 template_offset = 0;
     INT64 bytes = 0;
-    unsigned char *buf = NULL;
+    char *buf = NULL;
     FILE *file = NULL;
     INT64 file_size = 0;
     INT64 desc_start = 0;
@@ -774,7 +811,7 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
     file_size = get_file_size(filename);
     fseek(file, file_size - 6, SEEK_SET);
     fread(buf, 6, 1, file);
-    desc_start = file_size - read_le48(buf);
+    desc_start = file_size - read_le48((unsigned char *)buf);
 
     /* Now seek back to the beginning image desc block to grab the MD5
        and image length */
@@ -790,20 +827,20 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
     if (sizeonly)
     {
         fclose(file);
-        printf("%lld\n", read_le48(&buf[1]));
+        printf("%lld\n", read_le48((unsigned char *)&buf[1]));
         return 0;
     }
 
     if (verbose)
     {
-        fprintf(logfile, "Image should be %lld bytes\n", read_le48(&buf[1]));
-        fprintf(logfile, "Image MD5 should be ");
+        fprintf(logfile, "Image MD5 should be    ");
         for (i = 0; i < 16; i++)
-            fprintf(logfile, "%2.2x", buf[i+7]);
+            fprintf(logfile, "%2.2x", (unsigned char)buf[i+7]);
         fprintf(logfile, "\n");
+        fprintf(logfile, "Image size should be   %lld bytes\n", read_le48((unsigned char *)&buf[1]));
     }
 
-    out_size = read_le48(&buf[1]);
+    out_size = read_le48((unsigned char *)&buf[1]);
     
     /* Now seek back to the start of the desc block */
     fseek(file, desc_start, SEEK_SET);
@@ -814,11 +851,11 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
         fclose(file);
         return EINVAL;
     }
-    if ((file_size - desc_start) != read_le48(&buf[4]))
+    if ((file_size - desc_start) != read_le48((unsigned char *)&buf[4]))
     {
         fprintf(logfile, "Inconsistent desc length in the template file!\n");
         fprintf(logfile, "Final chunk says %lld, first chunk says %lld\n",
-                file_size - desc_start, read_le48(&buf[4]));
+                file_size - desc_start, read_le48((unsigned char *)&buf[4]));
         fclose(file);
         return EINVAL;
     }
@@ -859,7 +896,7 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
             return EINVAL;
         }
         
-        extent_size = read_le48(&buf[1]);
+        extent_size = read_le48((unsigned char *)&buf[1]);
         read_length = extent_size;
         
         if (start_offset > output_offset)
@@ -902,7 +939,7 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
                 template_offset += 31;
                 if ((output_offset + extent_size) >= start_offset)
                 {
-                    error = parse_file_block(skip, read_length, extent_size, &buf[15], &template_context, missing);
+                    error = parse_file_block(skip, read_length, extent_size, (unsigned char *)&buf[15], &template_context, missing);
                     if (error)
                     {
                         fprintf(logfile, "Unable to read file block, error %d\n", error);
@@ -930,12 +967,12 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
         if (!quick)
         {
             mk_MD5Final (image_md5sum, &template_context);
-            fprintf(logfile, "Output image MD5 is ");
+            fprintf(logfile, "Output image MD5 is    ");
             for (i = 0; i < 16; i++)
                 fprintf(logfile, "%2.2x", image_md5sum[i]);
             fprintf(logfile, "\n");
         }
-        fprintf(logfile, "Output image length is %lld\n", written_length);
+        fprintf(logfile, "Output image length is %lld bytes\n", written_length);
     }
     
     return 0;
@@ -970,7 +1007,6 @@ int main(int argc, char **argv)
     char *template_filename = NULL;
     char *jigdo_filename = NULL;
     char *md5_filename = NULL;
-    char *missing_filename = NULL;
     char *output_name = NULL;
     int c = -1;
     int error = 0;

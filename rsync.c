@@ -152,7 +152,7 @@ static int rsyncsum_file(char *filename)
         bytes_read += used;
         if (used)
         {
-            rsum = rsync64(buf, BUF_SIZE);
+            rsum = rsync64((unsigned char *)buf, BUF_SIZE);
             done = 1;
         }
     }

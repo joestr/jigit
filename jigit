@@ -6,6 +6,7 @@
 #
 # Wrapper for jigdo to make updating CDs easier
 #
+# GPL v2 - see COPYING
 
 # Some definitions
 APT_CACHE=/var/cache/apt/archives
