@@ -24,6 +24,9 @@ typedef unsigned long      UINT32;
 #endif
 
 FILE *logfile = NULL;
+FILE *outfile = NULL;
+unsigned long long start_offset = 0;
+unsigned long long end_offset = 0;
 int quick = 0;
 
 typedef enum state_
@@ -61,7 +64,8 @@ struct
 {
     char   *data_buf;
     size_t  buf_size;
-    off_t   curr_offset;
+    off_t   offset_in_curr_buf;
+    off_t   total_offset;
 } zip_state;
 
 static int add_match_entry(char *match)
@@ -254,11 +258,11 @@ static int add_file_entry(char *jigdo_entry)
 static int parse_jigdo_file(char *filename)
 {
     unsigned char buf[2048];
-    FILE *file = NULL;
+    gzFile *file = NULL;
     char *ret = NULL;
     int error = 0;
     
-    file = fopen(filename, "rb");
+    file = gzopen(filename, "rb");
     if (!file)
     {
         fprintf(logfile, "Failed to open jigdo file %s, error %d!\n", filename, errno);
@@ -268,7 +272,7 @@ static int parse_jigdo_file(char *filename)
     /* Find the [Parts] section of the jigdo file */
     while (1)
     {
-        ret = fgets(buf, sizeof(buf), file);
+        ret = gzgets(file, buf, sizeof(buf));
         if (NULL == ret)
             break;
         if (!strncmp(buf, "[Parts]", 7))
@@ -278,17 +282,18 @@ static int parse_jigdo_file(char *filename)
     /* Now grab the individual file entries and build a list */
     while (1)
     {
-        ret = fgets(buf, sizeof(buf), file);
+        ret = gzgets(file, buf, sizeof(buf));
         if (NULL == ret || !strcmp(buf, "\n"))
             break;
         if (!strcmp(buf, "[") || !strcmp(buf, "#"))
             continue;
         error = add_file_entry(strdup(buf));
         if (error)
-            return error;
+            break;
     }
-    
-    return 0;
+
+    gzclose(file);
+    return error;
 }
 
 static off_t get_file_size(char *filename)
@@ -418,9 +423,44 @@ static int read_data_block(FILE *template_file)
         
     template_offset += compressed_len;
     zip_state.buf_size = uncompressed_len;
-    zip_state.curr_offset = 0;
+    zip_state.offset_in_curr_buf = 0;
     free (comp_buf);
     return 0;
+}
+
+static int skip_data_block(size_t data_size, FILE *template_file)
+{
+    int error = 0;
+    size_t remaining = data_size;
+    size_t size = 0;
+
+    /* If we're coming in in the middle of the image, we'll need to
+       skip through some compressed data */
+    while (remaining)
+    {
+        if (!zip_state.data_buf)
+        {
+            error = read_data_block(template_file);
+            if (error)
+            {
+                fprintf(logfile, "Unable to decompress template data, error %d\n",
+                        error);
+                return error;
+            }
+        }
+        size = MIN((zip_state.buf_size - zip_state.offset_in_curr_buf), remaining);
+        zip_state.offset_in_curr_buf += size;
+        remaining -= size;
+        
+        if (zip_state.offset_in_curr_buf == zip_state.buf_size)
+        {
+            free(zip_state.data_buf);
+            zip_state.data_buf = NULL;
+        }
+    }
+    
+    fprintf(logfile, "skip_data_block: skipped %d bytes of unmatched data\n", data_size);
+    return error;
 }
 
 static int parse_data_block(size_t data_size, FILE *template_file, struct mk_MD5Context *context)
@@ -428,6 +468,7 @@ static int parse_data_block(size_t data_size, FILE *template_file, struct mk_MD5
     int error = 0;
     size_t remaining = data_size;
     size_t size = 0;
+    int out_size = 0;
 
     while (remaining)
     {
@@ -441,14 +482,20 @@ static int parse_data_block(size_t data_size, FILE *template_file, struct mk_MD5
                 return error;
             }
         }
-        size = MIN((zip_state.buf_size - zip_state.curr_offset), remaining);
-        fwrite(&zip_state.data_buf[zip_state.curr_offset], 1, size, stdout);
+        size = MIN((zip_state.buf_size - zip_state.offset_in_curr_buf), remaining);
+        out_size = fwrite(&zip_state.data_buf[zip_state.offset_in_curr_buf], size, 1, outfile);
+        if (!out_size)
+        {
+            fprintf(logfile, "parse_data_block: fwrite %d failed with error %d; aborting\n", size, ferror(outfile));
+            return ferror(outfile);
+        }
+
         if (!quick)
-            mk_MD5Update(context, &zip_state.data_buf[zip_state.curr_offset], size);
-        zip_state.curr_offset += size;
+            mk_MD5Update(context, &zip_state.data_buf[zip_state.offset_in_curr_buf], size);
+        zip_state.offset_in_curr_buf += size;
         remaining -= size;
         
-        if (zip_state.curr_offset == zip_state.buf_size)
+        if (zip_state.offset_in_curr_buf == zip_state.buf_size)
         {
             free(zip_state.data_buf);
             zip_state.data_buf = NULL;
@@ -459,16 +506,17 @@ static int parse_data_block(size_t data_size, FILE *template_file, struct mk_MD5
     return error;
 }
 
-static int parse_file_block(off_t file_size, char *md5, struct mk_MD5Context *image_context)
+static int parse_file_block(off_t offset, size_t data_size, off_t file_size, char *md5, struct mk_MD5Context *image_context)
 {
     char *base64_md5 = base64_dump(md5, 16);
     FILE *input_file = NULL;
     char buf[BUF_SIZE];
-    size_t remaining = file_size;
+    size_t remaining = data_size;
     int num_read = 0;
     struct mk_MD5Context file_context;
     char file_md5[16];
     jigdo_list_t *jigdo_list_current = jigdo_list_head;
+    int out_size = 0;
     
     if (!quick)
         mk_MD5Init(&file_context);
@@ -485,6 +533,7 @@ static int parse_file_block(off_t file_size, char *md5, struct mk_MD5Context *im
                         jigdo_list_current->full_path, errno);
                 return errno;
             }
+            fseek(input_file, offset, SEEK_SET);
             while (remaining)
             {
                 int size = MIN(BUF_SIZE, remaining);
@@ -504,7 +553,12 @@ static int parse_file_block(off_t file_size, char *md5, struct mk_MD5Context *im
                     mk_MD5Update(&file_context, buf, size);
                 }
             
-                fwrite(buf, size, 1, stdout);
+                out_size = fwrite(buf, size, 1, outfile);
+                if (!out_size)
+                {
+                    fprintf(logfile, "parse_file_block: fwrite %d failed with error %d; aborting\n", size, ferror(outfile));
+                    return ferror(outfile);
+                }
             
                 remaining -= size;
             }
@@ -531,20 +585,22 @@ static int parse_file_block(off_t file_size, char *md5, struct mk_MD5Context *im
     return ENOENT;
 }
 
-static int parse_template_file(char *filename)
+static int parse_template_file(char *filename, int sizeonly)
 {
-    off_t offset = 0;
+    off_t template_offset = 0;
     off_t bytes = 0;
     unsigned char *buf = NULL;
     FILE *file = NULL;
     off_t file_size = 0;
     off_t desc_start = 0;
-    off_t image_length = 0;
     off_t written_length = 0;
+    off_t output_offset = 0;
     int i = 0;
     int error = 0;
     struct mk_MD5Context template_context;
     unsigned char image_md5sum[16];
+
+    zip_state.total_offset = 0;
     
     file = fopen(filename, "rb");
     if (!file)
@@ -577,15 +633,21 @@ static int parse_template_file(char *filename)
         fclose(file);
         return EINVAL;
     }
-    image_length = read_le48(&buf[1]);
-    fprintf(logfile, "Image is %lld bytes\n", image_length);
+
+    if (sizeonly)
+    {
+        fclose(file);
+        printf("%lld\n", read_le48(&buf[1]));
+        return 0;
+    }
+
+    fprintf(logfile, "Image is %lld bytes\n", read_le48(&buf[1]));
     fprintf(logfile, "Image MD5 is ");
     for (i = 0; i < 16; i++)
         fprintf(logfile, "%2.2x", buf[i+7]);
     fprintf(logfile, "\n");
 
-    /* Now seek back to the start of the desc block and start
-       assembling the image */
+    /* Now seek back to the start of the desc block */
     fseek(file, desc_start, SEEK_SET);
     fread(buf, 10, 1, file);
     if (strncmp(buf, "DESC", 4))
@@ -605,14 +667,29 @@ static int parse_template_file(char *filename)
 
     if (!quick)
         mk_MD5Init(&template_context);
-    offset = desc_start + 10;
+    template_offset = desc_start + 10;
+
+    /* Main loop - walk through the template file and expand each entry we find */
     while (1)
     {
-        if (offset >= (file_size - 33))
-            break; /* Finished! */
+        off_t extent_size;
+        off_t skip = 0;
+        off_t read_length = 0;
 
-        fseek(file, offset, SEEK_SET);
-        bytes = fread(buf, (MIN (BUF_SIZE, file_size - offset)), 1, file);
+        if (template_offset >= (file_size - 33))
+        {
+            fprintf(logfile, "Reached end of template file\n");
+            break; /* Finished! */
+        }
+        
+        if (output_offset > end_offset) /* Past the range we were asked for */
+        {
+            fprintf(logfile, "Reached end of range requested\n");            
+            break;
+        }
+        
+        fseek(file, template_offset, SEEK_SET);
+        bytes = fread(buf, (MIN (BUF_SIZE, file_size - template_offset)), 1, file);
         if (1 != bytes)
         {
             fprintf(logfile, "Failed to read template file!\n");
@@ -620,35 +697,62 @@ static int parse_template_file(char *filename)
             return EINVAL;
         }
         
+        extent_size = read_le48(&buf[1]);
+        read_length = extent_size;
+        
+        if (start_offset > output_offset)
+            skip = start_offset - output_offset;
+        if ((output_offset + extent_size) > end_offset)
+            read_length -= (output_offset + extent_size - end_offset - 1);
+        read_length -= skip;
+        
         switch (buf[0])
         {
+            
             case 2: /* unmatched data */
-                error = parse_data_block(read_le48(&buf[1]), file, &template_context);
-                if (error)
+                if ((output_offset + extent_size) >= start_offset)
                 {
-                    fprintf(logfile, "Unable to read data block, error %d\n", error);
-                    fclose(file);
-                    return error;
+                    if (skip)
+                        error = skip_data_block(skip, file);
+                    if (error)
+                    {
+                        fprintf(logfile, "Unable to read data block to skip, error %d\n", error);
+                        fclose(file);
+                        return error;
+                    }
+                    error = parse_data_block(read_length, file, &template_context);
+                    if (error)
+                    {
+                        fprintf(logfile, "Unable to read data block, error %d\n", error);
+                        fclose(file);
+                        return error;
+                    }
+                    written_length += read_length;
                 }
-                offset += 7;
-                written_length += read_le48(&buf[1]);
+                else
+                    error = skip_data_block(extent_size, file);
+                template_offset += 7;
                 break;
             case 6:
-                error = parse_file_block(read_le48(&buf[1]), &buf[15], &template_context);
-                if (error)
+                if ((output_offset + extent_size) >= start_offset)
                 {
-                    fprintf(logfile, "Unable to read file block, error %d\n", error);
-                    fclose(file);
-                    return error;
+                    error = parse_file_block(skip, read_length, extent_size, &buf[15], &template_context);
+                    if (error)
+                    {
+                        fprintf(logfile, "Unable to read file block, error %d\n", error);
+                        fclose(file);
+                        return error;
+                    }
+                    written_length += read_length;
                 }
-                offset += 31;
-                written_length += read_le48(&buf[1]);
+                template_offset += 31;
                 break;
             default:
                 fprintf(logfile, "Unknown block type %d!\n", buf[0]);
                 fclose(file);
                 return EINVAL;
         }
+        output_offset += extent_size;
     }
     
     fclose(file);
@@ -674,7 +778,13 @@ static void usage(char *progname)
     printf(" -m <item=path>      Map <item> to <path> to find the files in the mirror\n");
     printf(" -l <logfile>        Specify a logfile to append to.\n");
     printf("                     If not specified, will log to stderr\n");
+    printf(" -o <outfile>        Specify a file to write the ISO image to.\n");
+    printf("                     If not specified, will write to stdout\n");
     printf(" -q                  Quick mode. Don't check MD5sums. Dangerous!\n");
+    printf(" -s <bytenum>        Start byte number; will start at 0 if not specified\n");
+    printf(" -e <bytenum>        End byte number; will end at EOF if not specified\n");    
+    printf(" -z                  Don't attempt to rebuild the image; simply print its\n");
+    printf("                     size in bytes\n");
 }
 
 int main(int argc, char **argv)
@@ -683,14 +793,16 @@ int main(int argc, char **argv)
     char *jigdo_filename = NULL;
     int c = -1;
     int error = 0;
+    int sizeonly = 0;
 
     logfile = stderr;
+    outfile = stdout;
 
     bzero(&zip_state, sizeof(zip_state));
 
     while(1)
     {
-        c = getopt(argc, argv, ":ql:j:t:m:h?");
+        c = getopt(argc, argv, ":ql:o:j:t:m:h?s:e:z");
         if (-1 == c)
             break;
         
@@ -700,10 +812,19 @@ int main(int argc, char **argv)
                 quick = 1;
                 break;
             case 'l':
-                logfile = fopen(optarg, "wb");
+                logfile = fopen(optarg, "ab");
                 if (!logfile)
                 {
-                    fprintf(logfile, "Unable to open log file %s\n", optarg);
+                    fprintf(stderr, "Unable to open log file %s\n", optarg);
+                    return errno;
+                }
+                setlinebuf(logfile);
+                break;
+            case 'o':
+                outfile = fopen(optarg, "wb");
+                if (!outfile)
+                {
+                    fprintf(stderr, "Unable to open output file %s\n", optarg);
                     return errno;
                 }
                 break;
@@ -739,13 +860,29 @@ int main(int argc, char **argv)
                 usage(argv[0]);
                 return 0;
                 break;
+            case 's':
+                start_offset = strtoull(optarg, NULL, 10);
+                if (start_offset != 0)
+                    quick = 1;
+                break;
+            case 'e':
+                end_offset = strtoull(optarg, NULL, 10);
+                if (end_offset != 0)
+                    quick = 1;
+                break;
+            case 'z':
+                sizeonly = 1;
+                break;
             default:
                 fprintf(logfile, "Unknown option!\n");
                 return EINVAL;
         }
     }
 
-    if (NULL == jigdo_filename)
+    if (0 == end_offset)
+        end_offset = (unsigned long long)LONG_MAX * LONG_MAX;
+
+    if ((NULL == jigdo_filename) && !sizeonly)
     {
         fprintf(logfile, "No jigdo file specified!\n");
         usage(argv[0]);
@@ -759,21 +896,26 @@ int main(int argc, char **argv)
         return EINVAL;
     }    
 
-    /* Build up a list of file mappings */
-    error = parse_jigdo_file(jigdo_filename);
-    if (error)
+    if (!sizeonly)
     {
-        fprintf(logfile, "Unable to parse the jigdo file %s\n", jigdo_filename);
-        return error;
+        /* Build up a list of file mappings */
+        error = parse_jigdo_file(jigdo_filename);
+        if (error)
+        {
+            fprintf(logfile, "Unable to parse the jigdo file %s\n", jigdo_filename);
+            return error;
+        }
     }
-
-    /* Read the template file and actually build the image to stdout */
-    error = parse_template_file(template_filename);
+    
+    /* Read the template file and actually build the image to <outfile> */
+    error = parse_template_file(template_filename, sizeonly);
     if (error)
     {
         fprintf(logfile, "Unable to recreate image from template file %s\n", template_filename);
         return error;
     }        
+
+    fclose(logfile);
 
     return 0;
 }
