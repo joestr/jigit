@@ -9,8 +9,10 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include "md5.h"
 
 typedef unsigned long long UINT64;
+typedef long long INT64;
 typedef unsigned long      UINT32;
 
 #define BUF_SIZE 65536
@@ -25,10 +27,10 @@ typedef enum state_
     ERROR
 } e_state;
 
-off_t find_string(unsigned char *buf, size_t buf_size, char *search)
+INT64 find_string(unsigned char *buf, size_t buf_size, char *search)
 {
     size_t length = strlen(search);
-    off_t result;
+    INT64 result;
     
     for (result = 0; result < (buf_size - length); result++)
     {
@@ -38,7 +40,7 @@ off_t find_string(unsigned char *buf, size_t buf_size, char *search)
     return -1;
 }
 
-off_t parse_data_block(off_t offset, unsigned char *buf, size_t buf_size)
+INT64 parse_data_block(INT64 offset, unsigned char *buf, size_t buf_size)
 {
     /* Parse the contents of this data block... */
     UINT64 dataLen = 0;
@@ -64,31 +66,7 @@ off_t parse_data_block(off_t offset, unsigned char *buf, size_t buf_size)
     return dataLen;
 }
 
-void base64_dump(unsigned char *buf, size_t buf_size)
-{
-    const char *b64_enc = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-    int value = 0;
-    unsigned int i;
-    int bits = 0;
-
-    for (i = 0; i < buf_size ; i++)
-    {
-        value = (value << 8) | buf[i];
-        bits += 2;
-        printf("%c", b64_enc[(value >> bits) & 63U]);
-        if (bits >= 8) {
-            bits -= 6;
-            printf("%c", b64_enc[(value >> bits) & 63U]);
-        }
-    }
-    if (bits > 0)
-    {
-        value <<= 8 - bits;
-        printf("%c", b64_enc[(value >> bits) & 63U]);
-    }
-}
-
-off_t parse_desc_block(off_t offset, unsigned char *buf, size_t buf_size)
+INT64 parse_desc_block(INT64 offset, unsigned char *buf, size_t buf_size)
 {
     /* Parse the contents of this data block... */
     UINT64 descLen = 0;
@@ -105,7 +83,7 @@ off_t parse_desc_block(off_t offset, unsigned char *buf, size_t buf_size)
     return 10;
 }
 
-off_t parse_desc_data(off_t offset, unsigned char *buf, size_t buf_size)
+INT64 parse_desc_data(INT64 offset, unsigned char *buf, size_t buf_size)
 {
     int type = buf[0];
     printf("  DESC entry: block type %d\n", type);
@@ -146,10 +124,8 @@ off_t parse_desc_data(off_t offset, unsigned char *buf, size_t buf_size)
             printf("    Image MD5: ");
             for (i = 7; i < 23; i++)
                 printf("%2.2x", buf[i]);
-            printf(" (");
-            base64_dump(&buf[7], 16);
-            printf(")");
-            printf("\n    MD5 block length %lu bytes\n", blocklen);
+            printf(" (%s)\n", base64_dump(&buf[7], 16));
+            printf("    Rsync block length %lu bytes\n", blocklen);
             return 0; /* i.e. we're finished! */
         }
         case 6:
@@ -168,13 +144,11 @@ off_t parse_desc_data(off_t offset, unsigned char *buf, size_t buf_size)
             printf("    file rsyncsum: ");
             for (i = 7; i < 15; i++)
                 printf("%2.2x", buf[i]);
-            printf("\n    file md5: ");
+            printf(" (%s)\n", base64_dump(&buf[7], 8));
+            printf("    file md5: ");
             for (i = 15; i < 31; i++)
                 printf("%2.2x", buf[i]);
-            printf(" (");
-            base64_dump(&buf[15], 16);
-            printf(")");
-            printf("\n");
+            printf(" (%s)\n", base64_dump(&buf[15], 16));
             return 31;
         }
         default:
@@ -189,8 +163,8 @@ int main(int argc, char **argv)
     char *filename = NULL;
     int fd = -1;
     unsigned char *buf = NULL;
-    off_t offset = 0;
-    off_t bytes = 0;
+    INT64 offset = 0;
+    INT64 bytes = 0;
     e_state state = STARTING;
     
     if (argc != 2)
@@ -218,7 +192,7 @@ int main(int argc, char **argv)
     /* Find the beginning of the data - read the first chunk, including the header */
     while (STARTING == state)
     {
-        off_t start_offset = -1;
+        INT64 start_offset = -1;
 
         bytes = read(fd, buf, BUF_SIZE);
         if (0 >= bytes)
@@ -238,7 +212,7 @@ int main(int argc, char **argv)
 
     while (DONE != state && ERROR != state)
     {
-        off_t start_offset = -1;
+        INT64 start_offset = -1;
         lseek(fd, offset, SEEK_SET);
         bytes = read(fd, buf, BUF_SIZE);
         if (0 >= bytes)

@@ -14,11 +14,13 @@
 #      snapshot will be written
 #   the locations of the input jigdo and template files
 #   the keyword to look for (e.g. Debian)
+#   the snapshot dirname (e.g. today's date)
 # Example:
 # ./mkjigsnap -o /tmp/mjs-test -n mjs-test -m /tmp/mirror \
 #      -j ~/jigdo/update/debian-update-3.0r2.01-i386.jigdo \
 #      -t ~/jigdo/update/debian-update-3.0r2.01-i386.template \
 #      -k Debian -k Non-US
+#      -d 20041017
 
 while [ $# -gt 0 ]
 do
@@ -46,6 +48,11 @@ do
         "-t"x)
             shift
             TEMPLATE=$1
+            shift
+            ;;
+        "-d"x)
+            shift
+            DIRNAME=$1
             shift
             ;;
         "-k"x)
@@ -85,30 +92,33 @@ if [ "$TEMPLATE"x = ""x ] ; then
     exit 1
 fi
     
+if [ "$DIRNAME"x = ""x ] ; then
+    echo "You must specify the snapshot directory name!"
+    exit 1
+fi
+    
 if [ "$KEYWORDS"x = ""x ] ; then
     echo "You must specify the keywords to match!"
     exit 1
 fi
 
-DATE=`date '+%Y-%m-%d'`
-    
 # If we got here, we have all the info we need
 echo "Creating snapshot tree:"
 for KEYWORD in $KEYWORDS
 do
-    NUM=$(( $NUM + `grep "$KEYWORD:" $JIGDO | wc -l`))
+    NUM=$(( $NUM + `zcat -f $JIGDO | grep "$KEYWORD:" | wc -l`))
 done
 LINKS_DONE=0
 for KEYWORD in $KEYWORDS
 do
-    for jentry in `cat $JIGDO | grep =$KEYWORD:`
+    for jentry in `zcat -f $JIGDO | grep =$KEYWORD:`
     do
         file=`echo $jentry | sed "s/^.*$KEYWORD://g"`
-        dir=$OUT/snapshot/$DATE/`dirname $file`
+        dir=$OUT/snapshot/$DIRNAME/`dirname $file`
         if [ ! -d $dir ] ; then
             mkdir -p $dir
         fi
-        ln -f $MIRROR/$file $OUT/snapshot/$DATE/$file
+        ln -f $MIRROR/$file $OUT/snapshot/$DIRNAME/$file
         error=$?
         if [ $error -ne 0 ] ; then
             echo "Unable to link $MIRROR/$file; error $error"
@@ -121,9 +131,9 @@ done
 
 echo
 
-cp $JIGDO $OUT/$CDNAME.jigdo
+zcat -f $JIGDO | sed "s:^Template=.*$:Template=$CDNAME.template:" | gzip -9 > $OUT/$CDNAME.jigdo
 cp $TEMPLATE $OUT/$CDNAME.template
 echo "JIGDO=$CDNAME.jigdo" > $OUT/$CDNAME.conf
 echo "TEMPLATE=$CDNAME.template" >> $OUT/$CDNAME.conf
-echo "SNAPSHOT=snapshot/$DATE" >> $OUT/$CDNAME.conf
+echo "SNAPSHOT=snapshot/$DIRNAME" >> $OUT/$CDNAME.conf
 

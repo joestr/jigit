@@ -4,7 +4,8 @@ mkjigsnap \- Create a snapshot tree on a jigdo server
 .SH SYNOPSIS
 .B mkjigsnap
 \-n \f CD name\fR \-m \f mirror\fR \-o \f output directory\fR
-\-j \f jigdo file\fR \-t \f template file\fR \-k \f keyword\fR
+\-d \f dirname\fR \-j \f jigdo file\fR \-t \f template file\fR
+\-k \f keyword\fR
 .SH DESCRIPTION
 .PP
 mkjigsnap will create the directory tree and snapshot needed for jigit
@@ -15,6 +16,10 @@ options.
 .TP
 \fB\-n CD name\fR
 Specify the output name for jigit (e.g. warty, sarge-i386-1).
+.TP
+\fB\-d dir name\fR
+Specify the output directory name to be used for the snapshot tree
+(e.g. 20041011, rc1).
 .TP
 \fB\-m mirror\fR
 Specify the location of the mirror containing all the files

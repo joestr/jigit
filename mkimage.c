@@ -18,8 +18,13 @@
 #include "endian.h"
 #include "md5.h"
 
+typedef long long INT64;
 typedef unsigned long long UINT64;
 typedef unsigned long      UINT32;
+
+#ifndef LLONG_MAX
+#   define LLONG_MAX (INT64)INT_MAX * INT_MAX
+#endif
 
 #define BUF_SIZE 65536
 #define MISSING -1
@@ -34,8 +39,8 @@ typedef unsigned long      UINT32;
 FILE *logfile = NULL;
 FILE *outfile = NULL;
 FILE *missing_file = NULL;
-unsigned long long start_offset = 0;
-unsigned long long end_offset = 0;
+long long start_offset = 0;
+long long end_offset = 0;
 int quick = 0;
 int verbose = 0;
 UINT64 out_size = 0;
@@ -63,7 +68,7 @@ match_list_t *match_list_tail = NULL;
 typedef struct md5_list_
 {
     struct md5_list_ *next;
-    off_t file_size;
+    INT64 file_size;
     char *md5;
     char *full_path;
 } md5_list_t;
@@ -74,9 +79,9 @@ md5_list_t *md5_list_tail = NULL;
 struct
 {
     char   *data_buf;
-    size_t  buf_size;
-    off_t   offset_in_curr_buf;
-    off_t   total_offset;
+    INT64  buf_size;
+    INT64   offset_in_curr_buf;
+    INT64   total_offset;
 } zip_state;
 
 /* Grab the file component from a full path */
@@ -109,7 +114,7 @@ static void write_missing_entry(char *missing, char *filename)
     fprintf(missing_file, "%s\n", filename);
 }
 
-static off_t get_file_size(char *filename)
+static INT64 get_file_size(char *filename)
 {
     struct stat sb;
     int error = 0;
@@ -123,7 +128,7 @@ static off_t get_file_size(char *filename)
 
 static void display_progress(FILE *file, char *text)
 {
-    off_t written = ftello(file);
+    INT64 written = ftello(file);
     if (out_size > 0)
         fprintf(logfile, "\r %5.2f%%  %-60.60s",
                100.0 * written / out_size, text);
@@ -177,7 +182,7 @@ static int add_match_entry(char *match)
     return 0;
 }
 
-static int file_exists(char *path, off_t *size)
+static int file_exists(char *path, INT64 *size)
 {
     struct stat sb;
     int error = 0;
@@ -193,7 +198,7 @@ static int file_exists(char *path, off_t *size)
     return 0;
 }
 
-static int find_file_in_mirror(char *jigdo_entry, char **mirror_path, char **md5sum, off_t *file_size)
+static int find_file_in_mirror(char *jigdo_entry, char **mirror_path, char **md5sum, INT64 *file_size)
 {
     match_list_t *entry = match_list_head;
     char path[PATH_MAX];
@@ -249,7 +254,7 @@ static int find_file_in_mirror(char *jigdo_entry, char **mirror_path, char **md5
 }
 
 
-static int add_md5_entry(off_t size, char *md5, char *path)
+static int add_md5_entry(INT64 size, char *md5, char *path)
 {
     md5_list_t *new = NULL;    
     new = calloc(1, sizeof(*new));
@@ -279,7 +284,7 @@ static int parse_md5_entry(char *md5_entry)
     int error = 0;
     char *file_name = NULL;
     char *md5 = NULL;
-    off_t file_size = 0;
+    INT64 file_size = 0;
 
     md5_entry[22] = 0;
     md5_entry[23] = 0;
@@ -329,7 +334,7 @@ static int add_file_entry(char *jigdo_entry)
     int error = 0;
     char *file_name = NULL;
     char *md5 = NULL;
-    off_t file_size = 0;
+    INT64 file_size = 0;
     
     error = find_file_in_mirror(jigdo_entry, &file_name, &md5, &file_size);
 
@@ -381,7 +386,7 @@ static int parse_jigdo_file(char *filename)
     return error;
 }
 
-static int ungzip_data_block(char *in_buf, size_t in_len, char *out_buf, size_t out_len)
+static int ungzip_data_block(char *in_buf, INT64 in_len, char *out_buf, INT64 out_len)
 {
     int error = 0;
     z_stream uc_stream;
@@ -420,7 +425,7 @@ static int ungzip_data_block(char *in_buf, size_t in_len, char *out_buf, size_t 
 }    
 
 #ifdef BZ2_SUPPORT
-static int unbzip_data_block(char *in_buf, size_t in_len, char *out_buf, size_t out_len)
+static int unbzip_data_block(char *in_buf, INT64 in_len, char *out_buf, INT64 out_len)
 {
     int error = 0;
     bz_stream uc_stream;
@@ -459,8 +464,8 @@ static int unbzip_data_block(char *in_buf, size_t in_len, char *out_buf, size_t 
 }    
 #endif
 
-static int decompress_data_block(char *in_buf, size_t in_len, char *out_buf,
-                                 size_t out_len, int compress_type)
+static int decompress_data_block(char *in_buf, INT64 in_len, char *out_buf,
+                                 INT64 out_len, int compress_type)
 {
 #ifdef BZ2_SUPPORT
     if (COMP_BZIP == compress_type)
@@ -473,10 +478,10 @@ static int decompress_data_block(char *in_buf, size_t in_len, char *out_buf,
 static int read_data_block(FILE *template_file, int compress_type)
 {
     char inbuf[1024];
-    off_t i = 0;
-    static off_t template_offset = -1;
-    off_t compressed_len = 0;
-    off_t uncompressed_len = 0;
+    INT64 i = 0;
+    static INT64 template_offset = -1;
+    INT64 compressed_len = 0;
+    INT64 uncompressed_len = 0;
     char *comp_buf = NULL;
     int read_num = 0;
     int error = 0;
@@ -552,11 +557,11 @@ static int read_data_block(FILE *template_file, int compress_type)
     return 0;
 }
 
-static int skip_data_block(size_t data_size, FILE *template_file, int compress_type)
+static int skip_data_block(INT64 data_size, FILE *template_file, int compress_type)
 {
     int error = 0;
-    size_t remaining = data_size;
-    size_t size = 0;
+    INT64 remaining = data_size;
+    INT64 size = 0;
 
     /* If we're coming in in the middle of the image, we'll need to
        skip through some compressed data */
@@ -583,16 +588,16 @@ static int skip_data_block(size_t data_size, FILE *template_file, int compress_t
         }
     }
     
-    fprintf(logfile, "skip_data_block: skipped %d bytes of unmatched data\n", data_size);
+    fprintf(logfile, "skip_data_block: skipped %lld bytes of unmatched data\n", data_size);
     return error;
 }
 
-static int parse_data_block(size_t data_size, FILE *template_file,
+static int parse_data_block(INT64 data_size, FILE *template_file,
                             struct mk_MD5Context *context, int compress_type)
 {
     int error = 0;
-    size_t remaining = data_size;
-    size_t size = 0;
+    INT64 remaining = data_size;
+    INT64 size = 0;
     int out_size = 0;
 
     while (remaining)
@@ -611,7 +616,7 @@ static int parse_data_block(size_t data_size, FILE *template_file,
         out_size = fwrite(&zip_state.data_buf[zip_state.offset_in_curr_buf], size, 1, outfile);
         if (!out_size)
         {
-            fprintf(logfile, "parse_data_block: fwrite %d failed with error %d; aborting\n", size, ferror(outfile));
+            fprintf(logfile, "parse_data_block: fwrite %lld failed with error %d; aborting\n", size, ferror(outfile));
             return ferror(outfile);
         }
 
@@ -630,18 +635,18 @@ static int parse_data_block(size_t data_size, FILE *template_file,
         }
     }
     if (verbose > 1)
-        fprintf(logfile, "parse_data_block: wrote %d bytes of unmatched data\n", data_size);
+        fprintf(logfile, "parse_data_block: wrote %lld bytes of unmatched data\n", data_size);
     return error;
 }
 
-static int parse_file_block(off_t offset, size_t data_size, off_t file_size, 
+static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size, 
                             char *md5, struct mk_MD5Context *image_context,
                             char *missing)
 {
     char *base64_md5 = base64_dump(md5, 16);
     FILE *input_file = NULL;
     char buf[BUF_SIZE];
-    size_t remaining = data_size;
+    INT64 remaining = data_size;
     int num_read = 0;
     struct mk_MD5Context file_context;
     char file_md5[16];
@@ -735,14 +740,14 @@ static int parse_file_block(off_t offset, size_t data_size, off_t file_size,
 
 static int parse_template_file(char *filename, int sizeonly, char *missing, char *output_name)
 {
-    off_t template_offset = 0;
-    off_t bytes = 0;
+    INT64 template_offset = 0;
+    INT64 bytes = 0;
     unsigned char *buf = NULL;
     FILE *file = NULL;
-    off_t file_size = 0;
-    off_t desc_start = 0;
-    off_t written_length = 0;
-    off_t output_offset = 0;
+    INT64 file_size = 0;
+    INT64 desc_start = 0;
+    INT64 written_length = 0;
+    INT64 output_offset = 0;
     int i = 0;
     int error = 0;
     struct mk_MD5Context template_context;
@@ -828,9 +833,9 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
     /* Main loop - walk through the template file and expand each entry we find */
     while (1)
     {
-        off_t extent_size;
-        off_t skip = 0;
-        off_t read_length = 0;
+        INT64 extent_size;
+        INT64 skip = 0;
+        INT64 read_length = 0;
 
         if (template_offset >= (file_size - 33))
         {
@@ -1072,7 +1077,7 @@ int main(int argc, char **argv)
     }
 
     if (0 == end_offset)
-        end_offset = (unsigned long long)LONG_MAX * LONG_MAX;
+        end_offset = LLONG_MAX;
 
     if ((NULL == jigdo_filename) &&
         (NULL == md5_filename) && 
