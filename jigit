@@ -1,0 +1,138 @@
+#!/bin/bash
+#
+# jigit
+#
+# (c) 2004 Steve McIntyre
+#
+# Wrapper for jigdo to make updating CDs easier
+#
+
+# Some definitions
+APT_CACHE=/var/cache/apt/archives
+WGET_OPTS="--passive-ftp --no-directories --non-verbose"
+HOST="http://people.debian.org/~93sam/"
+TMPDIR=/tmp
+
+if [ -e /etc/jigit.conf ] ; then
+    . /etc/jigit.conf
+fi
+if [ -e ~/.jigit.conf ] ; then
+    . ~/.jigit.conf
+fi
+
+URL="$HOST/jigit"
+
+if [ "$TMPDIR"x = ""x ] ; then
+    TMPDIR=/tmp
+fi
+
+SUITE=$1
+case $SUITE in
+    warty|hoary)
+        echo "Checking CD metadata for $SUITE"
+        ;;
+    *)
+        echo "$0:"
+        echo "Automatic downloader for Jigdo images"
+        echo "Usage:"
+        echo "   jigit [distribution]"
+        echo
+        echo "Currently supported distributions are:"
+        echo "  warty"
+        echo "  hoary"
+        exit 1
+    ;;
+esac
+
+for DIR in files jigdo
+do
+    if [ ! -d $TMPDIR/jigit/$DIR ] ; then
+        mkdir -p -m 700 $TMPDIR/jigit/$DIR
+    fi
+done
+
+cd $TMPDIR/jigit/jigdo
+# Grab the latest config file
+wget $WGET_OPTS --mirror $URL/$SUITE.conf
+
+. $SUITE.conf
+wget $WGET_OPTS --mirror $URL/$JIGDO
+wget $WGET_OPTS --mirror $URL/$TEMPLATE
+
+echo "If you have a previous CD or CD image available, where is it mounted?"
+echo "Say \"none\" if you have none"
+read -p "> [none] " CD
+
+if [ "$CD"x = ""x ] ; then
+    CD="none"
+fi
+
+cd $TMPDIR/jigit/files
+# If we have a CD, add it to the find list
+if [ "$CD" != "none" ] ; then
+    FIND="$CD"
+fi
+
+# Now the local apt cache and our own temp directory
+FIND="$FIND $APT_CACHE $TMPDIR/jigit/files"
+
+find $FIND -type f | \
+    xargs jigdo-file md5 -c $TMPDIR/jigit/jigdo/jigdo-cache.db \
+    > $TMPDIR/jigit/files/md5-list
+
+echo
+echo
+
+rm -f $TMPDIR/jigit/jigdo/missing-list
+
+# Check if we have all the pieces we need
+mkimage -f $TMPDIR/jigit/files/md5-list \
+    -t $TMPDIR/jigit/jigdo/$TEMPLATE \
+    -j $TMPDIR/jigit/jigdo/$JIGDO \
+    -M $TMPDIR/jigit/jigdo/missing-list
+
+# If we have a missing list, we're missing some files. Go and get them
+if [ -e $TMPDIR/jigit/jigdo/missing-list ] ; then
+    NUM=`wc -l $TMPDIR/jigit/jigdo/missing-list | awk '{print $1}'`
+    while [ $NUM -gt 0 ]
+    do
+        cd $TMPDIR/jigit/files
+        for file in `cat $TMPDIR/jigit/jigdo/missing-list`
+        do
+            printf "\r%5d files missing for the image; retrieving %s           " $NUM `basename $file`
+            mkdir -p `dirname $file`
+            wget $WGET_OPTS --mirror $URL/$SNAPSHOT/$file -O $file
+            stat $file > /dev/null
+            if [ $? -eq 0 ] ; then
+                NUM=$(($NUM - 1))
+            fi
+        done
+    done
+    echo
+    echo Done
+
+    # Now rebuild our index and try again
+    find $FIND -type f | \
+        xargs jigdo-file md5 -c $TMPDIR/jigit/jigdo/jigdo-cache.db \
+        > $TMPDIR/jigit/files/md5-list
+
+    rm -f $TMPDIR/jigit/jigdo/missing-list
+	# Check (again) if we have all the pieces we need
+    mkimage -f $TMPDIR/jigit/files/md5-list \
+        -t $TMPDIR/jigit/jigdo/$TEMPLATE \
+        -j $TMPDIR/jigit/jigdo/$JIGDO \
+        -M $TMPDIR/jigit/jigdo/missing-list
+
+	# If we still have a missing list, something is wrong. Give up
+    if [ -e $TMPDIR/jigit/jigdo/missing-list ] ; then
+        echo "Failed to build image; could not find all the files. ABORT"
+        exit 1
+    fi
+fi
+
+# We should have all the bits; build the image
+mkimage -v -f $TMPDIR/jigit/files/md5-list \
+    -t $TMPDIR/jigit/jigdo/$TEMPLATE \
+    -j $TMPDIR/jigit/jigdo/$JIGDO \
+    -o $TMPDIR/jigit/jigdo/$SUITE.iso \
+
