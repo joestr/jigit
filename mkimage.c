@@ -10,7 +10,6 @@
 #ifdef BZ2_SUPPORT
 #   include <bzlib.h>
 #endif
-#include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -80,6 +79,22 @@ struct
     off_t   total_offset;
 } zip_state;
 
+/* Grab the file component from a full path */
+static char *file_base_name(char *path)
+{
+    char *endptr = path;
+    char *ptr = path;
+    
+    while (*ptr != '\0')
+    {
+        if ('/' == *ptr)
+            endptr = ++ptr;
+        else
+            ++ptr;
+    }
+    return endptr;
+}
+
 static void write_missing_entry(char *missing, char *filename)
 {
     if (!missing_file)
@@ -106,12 +121,12 @@ static off_t get_file_size(char *filename)
         return sb.st_size;
 }
 
-static void display_progress(FILE *file)
+static void display_progress(FILE *file, char *text)
 {
     off_t written = ftello(file);
     if (out_size > 0)
-        fprintf(logfile, "\r Image creation: %5.2f%%  ",
-               100.0 * written / out_size);
+        fprintf(logfile, "\r %5.2f%%  %-60.60s",
+               100.0 * written / out_size, text);
 }
 
 static int add_match_entry(char *match)
@@ -176,36 +191,6 @@ static int file_exists(char *path, off_t *size)
     
     /* else */
     return 0;
-}
-
-static char *base64_dump(unsigned char *buf, size_t buf_size)
-{
-    const char *b64_enc = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-    int value = 0;
-    unsigned int i;
-    int bits = 0;
-    char *out = calloc(1, 30);
-    unsigned int out_pos = 0;
-
-    if (!out)
-        return NULL;
-
-    for (i = 0; i < buf_size ; i++)
-    {
-        value = (value << 8) | buf[i];
-        bits += 2;
-        out[out_pos++] = b64_enc[(value >> bits) & 63U];
-        if (bits >= 8) {
-            bits -= 6;
-            out[out_pos++] = b64_enc[(value >> bits) & 63U];
-        }
-    }
-    if (bits > 0)
-    {
-        value <<= 8 - bits;
-        out[out_pos++] = b64_enc[(value >> bits) & 63U];
-    }
-    return out;
 }
 
 static int find_file_in_mirror(char *jigdo_entry, char **mirror_path, char **md5sum, off_t *file_size)
@@ -631,7 +616,7 @@ static int parse_data_block(size_t data_size, FILE *template_file,
         }
 
         if (verbose)
-            display_progress(outfile);
+            display_progress(outfile, "template data");
 
         if (!quick)
             mk_MD5Update(context, &zip_state.data_buf[zip_state.offset_in_curr_buf], size);
@@ -713,7 +698,7 @@ static int parse_file_block(off_t offset, size_t data_size, off_t file_size,
                 }
             
                 if (verbose)
-                    display_progress(outfile);
+                    display_progress(outfile, file_base_name(md5_list_current->full_path));
 
                 remaining -= size;
             }
@@ -748,7 +733,7 @@ static int parse_file_block(off_t offset, size_t data_size, off_t file_size,
     return ENOENT;
 }
 
-static int parse_template_file(char *filename, int sizeonly, char *missing)
+static int parse_template_file(char *filename, int sizeonly, char *missing, char *output_name)
 {
     off_t template_offset = 0;
     off_t bytes = 0;
@@ -836,6 +821,9 @@ static int parse_template_file(char *filename, int sizeonly, char *missing)
     if (!quick)
         mk_MD5Init(&template_context);
     template_offset = desc_start + 10;
+
+    if (1 == verbose)
+        fprintf(logfile, "Creating ISO image %s\n", output_name);
 
     /* Main loop - walk through the template file and expand each entry we find */
     while (1)
@@ -978,6 +966,7 @@ int main(int argc, char **argv)
     char *jigdo_filename = NULL;
     char *md5_filename = NULL;
     char *missing_filename = NULL;
+    char *output_name = NULL;
     int c = -1;
     int error = 0;
     int sizeonly = 0;
@@ -1011,7 +1000,8 @@ int main(int argc, char **argv)
                 setlinebuf(logfile);
                 break;
             case 'o':
-                outfile = fopen(optarg, "wb");
+                output_name = optarg;
+                outfile = fopen(output_name, "wb");
                 if (!outfile)
                 {
                     fprintf(stderr, "Unable to open output file %s\n", optarg);
@@ -1121,9 +1111,11 @@ int main(int argc, char **argv)
             return error;
         }
     }
-    
+
+    if (!output_name)
+        output_name = "to stdout";
     /* Read the template file and actually build the image to <outfile> */
-    error = parse_template_file(template_filename, sizeonly, missing_filename);
+    error = parse_template_file(template_filename, sizeonly, missing_filename, output_name);
     if (error)
     {
         fprintf(logfile, "Unable to recreate image from template file %s\n", template_filename);
