@@ -9,7 +9,6 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
-#include <sys/sendfile.h>
 
 /* Possible commands to run. Or them together... */
 #define CMD_LIST        0x0001
