@@ -1,0 +1,51 @@
+.TH MKJIGSNAP 8 "September 2004" "Jigit jigdo tools"
+.SH NAME
+mkjigsnap \- Create a snapshot tree on a jigdo server
+.SH SYNOPSIS
+.B mkjigsnap
+\-n \f CD name\fR \-m \f mirror\fR \-o \f output directory\fR
+\-j \f jigdo file\fR \-t \f template file\fR \-k \f keyword\fR
+.SH DESCRIPTION
+.PP
+mkjigsnap will create the directory tree and snapshot needed for jigit
+to work effectively. Once you have created the .template and .jigdo
+files that you want to distribute, run mkjigsnap on a mirror machine
+and it will set things up for you. You need to specify all of the
+options.
+.TP
+\fB\-n CD name\fR
+Specify the output name for jigit (e.g. warty, sarge-i386-1).
+.TP
+\fB\-m mirror\fR
+Specify the location of the mirror containing all the files
+needed. This
+.B must
+be on the same filesystem as the output directory, as hard links will
+be used to create the snapshot efficiently.
+.TP
+\fB\-o output directory\fR
+Specify the output location for the jigdo, template, conf and
+snapshot. This
+.B must
+be on the same filesystem as the mirror, as hard links will be used to
+create the snapshot efficiently.
+.TP
+\fB\-j jigdo file\fR
+Specify the location of the jigdo file to be used.
+.TP
+\fB\-t template file\fR
+Specify the location of the template file to be used.
+.TP
+\fB\-k keyword\fR
+Specify the "keywords" which are used in the jigdo file (e.g. Debian,
+Non-US, Ubuntu).
+.SH "SEE ALSO"
+\fBjigdo-file\fP(1), \fBjigit\fP(1), \fBjigdump\fP(1) and \fBmkimage\fP(1).
+.SH "COPYRIGHT"
+Copyright 2004 Steve McIntyre (steve@einval.com)
+.PP
+mkjigsnap may be copied under the terms and conditions of version 2 of
+the GNU General Public License, as published by the Free Software
+Foundation (Cambridge, MA, USA).
+.SH "AUTHOR"
+Written by Steve McIntyre (steve@einval.com)

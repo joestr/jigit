@@ -1,0 +1,129 @@
+#!/bin/sh
+#
+# mkjigsnap
+#
+# (c) 2004 Steve McIntyre
+#
+# Server-side wrapper; run this on a machine with a mirror to set up
+# the snapshots for jigit
+
+# Some things needed:
+#   CD name of the jigit
+#   location of the mirror
+#   output location; where the jigdo, template file and 
+#      snapshot will be written
+#   the locations of the input jigdo and template files
+#   the keyword to look for (e.g. Debian)
+# Example:
+# ./mkjigsnap -o /tmp/mjs-test -n mjs-test -m /tmp/mirror \
+#      -j ~/jigdo/update/debian-update-3.0r2.01-i386.jigdo \
+#      -t ~/jigdo/update/debian-update-3.0r2.01-i386.template \
+#      -k Debian -k Non-US
+
+while [ $# -gt 0 ]
+do
+    case "$1"x in
+        "-n"x)
+            shift
+            CDNAME=$1
+            shift
+            ;;
+        "-m"x)
+            shift
+            MIRROR=$1
+            shift
+            ;;
+        "-o"x)
+            shift
+            OUT=$1
+            shift
+            ;;
+        "-j"x)
+            shift
+            JIGDO=$1
+            shift
+            ;;
+        "-t"x)
+            shift
+            TEMPLATE=$1
+            shift
+            ;;
+        "-k"x)
+            shift
+            KEYWORDS="$KEYWORDS $1"
+            shift
+            ;;
+        ""*)
+            echo "Input error!"
+            exit 1
+            ;;
+    esac
+done
+
+if [ "$CDNAME"x = ""x ] ; then
+    echo "You must specify the output name for the jigit conf!"
+    exit 1
+fi
+
+if [ "$MIRROR"x = ""x ] ; then
+    echo "You must specify the location of the mirror!"
+    exit 1
+fi
+    
+if [ "$OUT"x = ""x ] ; then
+    echo "You must specify where to set up the snapshot!"
+    exit 1
+fi
+    
+if [ "$JIGDO"x = ""x ] ; then
+    echo "You must specify the jigdo file!"
+    exit 1
+fi
+    
+if [ "$TEMPLATE"x = ""x ] ; then
+    echo "You must specify the template file!"
+    exit 1
+fi
+    
+if [ "$KEYWORDS"x = ""x ] ; then
+    echo "You must specify the keywords to match!"
+    exit 1
+fi
+
+DATE=`date '+%Y-%m-%d'`
+    
+# If we got here, we have all the info we need
+echo "Creating snapshot tree:"
+for KEYWORD in $KEYWORDS
+do
+    NUM=$(( $NUM + `grep "$KEYWORD:" $JIGDO | wc -l`))
+done
+LINKS_DONE=0
+for KEYWORD in $KEYWORDS
+do
+    for jentry in `cat $JIGDO | grep =$KEYWORD:`
+    do
+        file=`echo $jentry | sed "s/^.*$KEYWORD://g"`
+        dir=$OUT/snapshot/$DATE/`dirname $file`
+        if [ ! -d $dir ] ; then
+            mkdir -p $dir
+        fi
+        ln -f $MIRROR/$file $OUT/snapshot/$DATE/$file
+        error=$?
+        if [ $error -ne 0 ] ; then
+            echo "Unable to link $MIRROR/$file; error $error"
+            exit 1
+        fi
+        LINKS_DONE=$(($LINKS_DONE + 1))
+        printf "\r%d/%d links created" $LINKS_DONE $NUM
+    done
+done
+
+echo
+
+cp $JIGDO $OUT/$CDNAME.jigdo
+cp $TEMPLATE $OUT/$CDNAME.template
+echo "JIGDO=$CDNAME.jigdo" > $OUT/$CDNAME.conf
+echo "TEMPLATE=$CDNAME.template" >> $OUT/$CDNAME.conf
+echo "SNAPSHOT=snapshot/$DATE" >> $OUT/$CDNAME.conf
+
