@@ -1,0 +1,39 @@
+.TH JIGIT 1 "September 2004" "Jigit jigdo tools"
+.SH NAME
+jigit \- Easy CD download tool
+.SH SYNOPSIS
+.B jigit
+<distribution>
+.SH DESCRIPTION
+.PP
+jigit will automatically download the files needed to create a
+Debian/Ubuntu CD, using as many files available locally as possible
+before downloading any that are missing.
+.PP
+Configure jigit by editing /etc/jigit.conf or $HOME/.jigit.conf. The
+two settings that matter are:
+.TP
+.B HOST
+The base URL of the jigit update site.
+.TP
+.B TMPDIR
+Where jigit should store its temporary files. These may take up a LOT
+of space!
+.SH "HOW IT WORKS"
+jigit will download a configuration file from the remote host, along
+with jigdo and template files. It will scan your machine for any of
+the files it requires (e.g. in the apt cache), including any old
+CDs that you may have - simply tell it where to look when it asks.
+If any files are missing, jigit will download them. Once all files
+are available, jigit will build a new ISO image to match the one you
+would have downloaded.
+.SH "SEE ALSO"
+\fBjigdo-file\fP(1), \fBjigdump\fP(1), \fBjigsum\fP(1) and \fBmkimage\fP(1).
+.SH "COPYRIGHT"
+Copyright 2004 Steve McIntyre (steve@einval.com)
+.PP
+jigit may be copied under the terms and conditions of version 2
+of the GNU General Public License, as published by the Free
+Software Foundation (Cambridge, MA, USA).
+.SH "AUTHOR"
+Written by Steve McIntyre (steve@einval.com)

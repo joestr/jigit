@@ -9,9 +9,8 @@
 
 # Some definitions
 APT_CACHE=/var/cache/apt/archives
-WGET_OPTS="--passive-ftp --no-directories --non-verbose"
+WGET_OPTS="-q --passive-ftp --no-directories --non-verbose"
 HOST="http://people.debian.org/~93sam/"
-TMPDIR=/tmp
 
 if [ -e /etc/jigit.conf ] ; then
     . /etc/jigit.conf
@@ -26,8 +25,8 @@ if [ "$TMPDIR"x = ""x ] ; then
     TMPDIR=/tmp
 fi
 
-SUITE=$1
-case $SUITE in
+CDNAME=$1
+case $CDNAME in
     --help|-h)
         echo "$0:"
         echo "Automatic downloader for Jigdo images"
@@ -46,22 +45,24 @@ done
 
 cd $TMPDIR/jigit/jigdo
 # Grab the latest config file
-wget $WGET_OPTS --mirror $URL/$SUITE.conf
+echo "Downloading config:   $URL/$CDNAME.conf"
+wget $WGET_OPTS --mirror $URL/$CDNAME.conf
 
-. $SUITE.conf
+. $CDNAME.conf
+echo "Downloading jigdo:    $URL/$JIGDO"
 wget $WGET_OPTS --mirror $URL/$JIGDO
+echo "Downloading template: $URL/$TEMPLATE"
 wget $WGET_OPTS --mirror $URL/$TEMPLATE
 
-echo "If you have a previous CD or CD image available, where is it mounted?"
-echo "Say \"none\" if you have none"
+echo "If you have any previous CD or CD image(s) available, where are they mounted?"
+echo "Say \"none\" if you have none; separate multiple entries with spaces"
 read -p "> [none] " CD
-
 if [ "$CD"x = ""x ] ; then
     CD="none"
 fi
 
 cd $TMPDIR/jigit/files
-# If we have a CD, add it to the find list
+# If we have a CD or iso, add it to the find list
 if [ "$CD" != "none" ] ; then
     FIND="$CD"
 fi
@@ -69,10 +70,15 @@ fi
 # Now the local apt cache and our own temp directory
 FIND="$FIND $APT_CACHE $TMPDIR/jigit/files"
 
-find $FIND -type f | \
-    xargs jigdo-file md5 -c $TMPDIR/jigit/jigdo/jigdo-cache.db \
-    > $TMPDIR/jigit/files/md5-list
+> $TMPDIR/jigit/files/md5-list
 
+for LOC in $FIND
+do
+    echo
+    echo "Checking MD5 sums of files in $LOC:"
+    find $LOC -type f | \
+        xargs jigsum >> $TMPDIR/jigit/files/md5-list
+done
 echo
 echo
 
@@ -87,27 +93,26 @@ mkimage -f $TMPDIR/jigit/files/md5-list \
 # If we have a missing list, we're missing some files. Go and get them
 if [ -e $TMPDIR/jigit/jigdo/missing-list ] ; then
     NUM=`wc -l $TMPDIR/jigit/jigdo/missing-list | awk '{print $1}'`
+    echo "Need to download $NUM files to complete the image"
     while [ $NUM -gt 0 ]
     do
         cd $TMPDIR/jigit/files
         for file in `cat $TMPDIR/jigit/jigdo/missing-list`
         do
-            printf "\r%5d files missing for the image; retrieving %s           " $NUM `basename $file`
+            printf "\r%5d files missing; retrieving %-45.45s" $NUM `basename $file`
             mkdir -p `dirname $file`
             wget $WGET_OPTS --mirror $URL/$SNAPSHOT/$file -O $file
-            stat $file > /dev/null
-            if [ $? -eq 0 ] ; then
+            SIZE=`stat -c %s $file`
+            if [ $SIZE -gt 0 ] ; then
                 NUM=$(($NUM - 1))
+            else
+                echo
+                echo "Unable to download file $URL/$SNAPSHOT/$file to $file. Abort"
+                exit 1
             fi
+            jigsum $file >> $TMPDIR/jigit/files/md5-list 2>/dev/null
         done
     done
-    echo
-    echo Done
-
-    # Now rebuild our index and try again
-    find $FIND -type f | \
-        xargs jigdo-file md5 -c $TMPDIR/jigit/jigdo/jigdo-cache.db \
-        > $TMPDIR/jigit/files/md5-list
 
     rm -f $TMPDIR/jigit/jigdo/missing-list
 	# Check (again) if we have all the pieces we need
@@ -118,14 +123,22 @@ if [ -e $TMPDIR/jigit/jigdo/missing-list ] ; then
 
 	# If we still have a missing list, something is wrong. Give up
     if [ -e $TMPDIR/jigit/jigdo/missing-list ] ; then
-        echo "Failed to build image; could not find all the files. ABORT"
+        echo "Failed to build image; could not find/download all the files. ABORT"
         exit 1
     fi
 fi
 
+printf "\r%5d files missing; all needed files available                       " 0
+echo
+echo
 # We should have all the bits; build the image
 mkimage -v -f $TMPDIR/jigit/files/md5-list \
     -t $TMPDIR/jigit/jigdo/$TEMPLATE \
     -j $TMPDIR/jigit/jigdo/$JIGDO \
-    -o $TMPDIR/jigit/jigdo/$SUITE.iso \
+    -o $TMPDIR/jigit/jigdo/$CDNAME.iso \
 
+if [ $? -eq 0 ] ; then
+    echo "Image created successfully in $TMPDIR/jigit/jigdo/$CDNAME.iso"
+else
+    echo "Error creating image: $?"
+fi
