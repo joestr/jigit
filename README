@@ -1,7 +1,7 @@
-README for JTE 1.12
+README for JTE 1.13
 
 Steve McIntyre <steve@einval.com>
-05 Sep 2004
+16 Sep 2004
 
 JTE - Jigdo Template Export
 ===========================
@@ -241,7 +241,11 @@ various paths in the script:
 
 How to use jigit
 
-Coming soon...
+Jigit is a small, user-friendly wrapper around mkimage to make life
+easier for end users to download or upgrade existing CDs and CD
+images. Configure it by editing /etc/jigit.conf or ~/.jigit.conf, then
+run jigit with just one command line option, the name of the
+distribution CD. Answer the questions it asks and it will do the rest.
 
 ----------------------------------------------------------------------
 
