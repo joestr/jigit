@@ -1,0 +1,34 @@
+.TH JIGSUM 1 "September 2004" "Jigit jigdo tools"
+.SH NAME
+jigsum \- List MD5 sums of files in jigdo's bas64-alike format
+.SH SYNOPSIS
+.B jigsum
+[\fIfiles\fR]... 
+.SH DESCRIPTION
+.PP
+jigsum will read in all the files specified and write the MD5sum of
+each file to stdout (similarly to the md5sum program), but in the jigdo
+base64-like format rather than the normal hexadecimal format.
+.SH "EXAMPLES"
+.TP
+$ jigsum *.c
+.P
+l47z1lSgp8LjDKFbK-JE4g  endian.c
+.P
+14LC5gWctrarRvkobDxRQQ  jigdump.c
+.P
+NBACGqWruP5PAsv_o8Ahyg  jigsum.c
+.P
+qIsPRZQZmUWwim_yeYIQvg  md5.c
+.P
+Im7-9TForecHp6C7bekXUg  mkimage.c
+.SH "SEE ALSO"
+\fBjigdo-file\fP(1), \fBjigit\fP(1), \fBjigdump\fP(1) and \fBmkimage\fP(1).
+.SH "COPYRIGHT"
+Copyright 2004 Steve McIntyre (steve@einval.com)
+.PP
+jigsum may be copied under the terms and conditions of version 2
+of the GNU General Public License, as published by the Free
+Software Foundation (Cambridge, MA, USA).
+.SH "AUTHOR"
+Written by Steve McIntyre (steve@einval.com)
