@@ -1,7 +1,7 @@
-README for JTE 1.9
+README for JTE 1.12
 
 Steve McIntyre <steve@einval.com>
-30 Aug 2004
+05 Sep 2004
 
 JTE - Jigdo Template Export
 ===========================
@@ -36,19 +36,26 @@ mkisofs and jigdo separately. The output .jigdo and .template files work
 correctly, i.e. jigdo-file and the wrapper script jigdo-mirror accept them and
 will generate an ISO image that exactly matches the original.
 
-Current versions of JTE now also come with mkimage, a simple and very fast tool
-to reconstruct image files from .jigdo and .template files. It's not meant to
-compete with the normal jigdo-file program. It doesn't have any logic to cope
-with downloading missing files, for example. But it is much faster for people
-(like me!) who already have full local mirrors.
+Current versions of JTE now also come with some extra tools:
 
-There's now also a perl CGI script iso-image.pl to wrap around mkimage if you'd
-like to be able to offer images for HTTP download without using up multiple
-gigabytes of disk space. And for added network efficiency the perl CGI also
-supports HTTP v1.1 byte ranges so clients can resume aborted downloads.
+mkimage, a simple and very fast tool to reconstruct image files from
+.jigdo and .template files. It doesn't have any logic to cope with
+downloading missing files, but will list the missing files that are
+needed. It is also much faster for people (like me!) who already have
+full local mirrors.
 
-The addition of these two extra tools means that I'm now distributing JTE as a
-tarball rather than just a mkisofs patch; the patch is inside the tarball too.
+iso-image.pl is a CGI script to wrap around mkimage if you'd like to
+be able to offer images for HTTP download without using up multiple
+gigabytes of disk space. And for added network efficiency the perl CGI
+also supports HTTP v1.1 byte ranges so clients can resume aborted
+downloads.
+
+jigit is a first attempt at a user-friendly wrapper for mkimage on a
+user's machine.
+
+The addition of these extra tools means that I'm now distributing JTE
+as a tarball rather than just a mkisofs patch; the patch is inside the
+tarball too.
 
 ----------------------------------------------------------------------
 
@@ -68,6 +75,7 @@ mkisofs -J -r -o /home/steve/test1.iso \
         -jigdo-template /home/steve/test1.template \
         -jigdo-min-file-size 16384 \
         -jigdo-ignore "README*" \
+		-jigdo-force-md5 /pool/ \
         -jigdo-map Debian=/mirror/debian \
         -md5-list /home/steve/md5.list \
         /mirror/jigdo-test
@@ -80,7 +88,12 @@ files (.iso, .jigdo and .template). Multiple -jigdo-ignore and
 Use the -md5-list option to specify the location of a list of files
 and their md5sums in normal md5sum format. mkisofs will then compare
 the checksum of each file it is asked to write against the checksum of
-that file in the list. It will abort on any mismatches.
+that file in the list. It will abort on any mismatches. The MD5 list
+file must list all the files that are expected to be found and listed
+in the output .jigdo file. The -jigdo-force-md5 option specifies a
+path where all files are expected to have an MD5 entry
+(e.g. /pool/). Then if any files do not have a match, they must have
+been corrupted and mkisofs will abort.
 
 More options have now been added in version 1.2 so that you can
 specify the location of boot files within the ISO image. Previously
@@ -167,6 +180,9 @@ mkimage is a faster, local-only version of "jigdo-file make-image", again
 written in portable C. It takes a few options:
 
 +-----------------------------------------------------------------------------+
+|-f <MD5  |Specify a file containing MD5sums for files we should attempt to   |
+|file>    |use when rebuilding the image                                      |
+|---------+-------------------------------------------------------------------|
 |-j <jigdo|Specify the input jigdo file                                       |
 |file>    |                                                                   |
 |---------+-------------------------------------------------------------------|
@@ -177,12 +193,18 @@ written in portable C. It takes a few options:
 |-m <item=|Map <item> to <path> to find the files in the mirror               |
 |path>    |                                                                   |
 |---------+-------------------------------------------------------------------|
+|-M       |Don't attempt to build the image; just verify that all the         |
+|<Missing |components needed are available. If some are missing, list them in |
+|file>    |the specified file.                                                |
+|---------+-------------------------------------------------------------------|
+|-v       |Make the output logging more verbose.                              |
+|---------+-------------------------------------------------------------------|
 |-l <log  |Specify a logfile. If not specified, will log to stderr just like  |
 |file>    |mkisofs                                                            |
 |---------+-------------------------------------------------------------------|
 |         |Don't bother checking md5sums of the input files, or of the output |
 |-q       |image.                                                             |
-|         |WARNING: this may lead to corrupt images, but is much faster       |
+|         |WARNING: this may lead to corrupt images, but is much faster.      |
 |---------+-------------------------------------------------------------------|
 |-s <start|Specify where to start in the image (in bytes). If not specified,  |
 |offset>  |will start at the beginning (offset 0). Added for iso-image.pl use |
@@ -217,12 +239,16 @@ various paths in the script:
 
 ----------------------------------------------------------------------
 
+How to use jigit
+
+Coming soon...
+
+----------------------------------------------------------------------
+
 Debian-cd integration
 
-I've branched debian-cd in CVS to add JTE support - use the
-jte_support branch. There have been some more changes in HEAD since
-that point, so I also have a more recent diff available - see
-debian-cd.20040818.diff.gz. Let me know if you have any problems...
+Checkout current CVS head of debian-cd and apply the patch in
+JTE-patch1.gz.
 
 ----------------------------------------------------------------------
 
@@ -232,6 +258,8 @@ What's left to do?
     and let me know if you have any problems, especially with data corruption.
  2. More documentation.
  3. Push patches upstream. This may take a while...
+ 4. Bzip2 support - I've added this experimentally, but it's disabled
+    until jigdo itself gets it.
 
 I hope people find this useful - at the moment I shudder at the thought of
 releasing sarge (10+ CDs, netinst, business card, 2 DVDs per arch) without
