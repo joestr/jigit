@@ -952,10 +952,15 @@ static void usage(char *progname)
 {
     printf("%s [OPTIONS]\n\n", progname);
     printf(" Options:\n");
-    printf(" -f <MD5 name>       Specify an input MD5 file\n");
+    printf(" -f <MD5 name>       Specify an input MD5 file. MD5s must be in jigdo's\n");
+	printf("                     pseudo-base64 format\n");
     printf(" -j <jigdo name>     Specify the input jigdo file\n");
     printf(" -t <template name>  Specify the input template file\n");
     printf(" -m <item=path>      Map <item> to <path> to find the files in the mirror\n");
+	printf(" -M <missing name>   Rather than try to build the image, just check that\n");
+	printf("                     all the needed files are available. If any are missing,\n");
+	printf("                     list them in this file.\n");
+	printf(" -v                  Make the output logging more verbose\n");
     printf(" -l <logfile>        Specify a logfile to append to.\n");
     printf("                     If not specified, will log to stderr\n");
     printf(" -o <outfile>        Specify a file to write the ISO image to.\n");

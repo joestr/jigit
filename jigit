@@ -28,18 +28,11 @@ fi
 
 SUITE=$1
 case $SUITE in
-    warty|hoary)
-        echo "Checking CD metadata for $SUITE"
-        ;;
-    *)
+    --help|-h)
         echo "$0:"
         echo "Automatic downloader for Jigdo images"
         echo "Usage:"
         echo "   jigit [distribution]"
-        echo
-        echo "Currently supported distributions are:"
-        echo "  warty"
-        echo "  hoary"
         exit 1
     ;;
 esac
