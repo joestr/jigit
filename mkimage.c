@@ -1,3 +1,5 @@
+#undef BZ2_SUPPORT
+
 #include <errno.h>
 #include <math.h>
 #include <stdlib.h>
@@ -5,6 +7,9 @@
 #include <string.h>
 #include <limits.h>
 #include <zlib.h>
+#ifdef BZ2_SUPPORT
+#   include <bzlib.h>
+#endif
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -22,6 +27,9 @@ typedef unsigned long      UINT32;
 #ifndef MIN
 #define MIN(x,y)        ( ((x) < (y)) ? (x) : (y))
 #endif
+
+#define COMP_GZIP 2
+#define COMP_BZIP 8
 
 FILE *logfile = NULL;
 FILE *outfile = NULL;
@@ -308,7 +316,7 @@ static off_t get_file_size(char *filename)
         return sb.st_size;
 }
 
-static int decompress_data_block(char *in_buf, size_t in_len, char *out_buf, size_t out_len)
+static int ungzip_data_block(char *in_buf, size_t in_len, char *out_buf, size_t out_len)
 {
     int error = 0;
     z_stream uc_stream;
@@ -322,7 +330,7 @@ static int decompress_data_block(char *in_buf, size_t in_len, char *out_buf, siz
     error = inflateInit(&uc_stream);
     if (Z_OK != error)
     {
-        fprintf(logfile, "decompress_data_block: failed to init, error %d\n", error);
+        fprintf(logfile, "ungzip_data_block: failed to init, error %d\n", error);
         return EIO;
     }
     
@@ -332,21 +340,72 @@ static int decompress_data_block(char *in_buf, size_t in_len, char *out_buf, siz
     error = inflate(&uc_stream, Z_FINISH);
     if (Z_OK != error && Z_STREAM_END != error)
     {
-        fprintf(logfile, "decompress_data_block: failed to decompress, error %d\n", error);
+        fprintf(logfile, "ungzip_data_block: failed to decompress, error %d\n", error);
         return EIO;
     }
     
     error = inflateEnd(&uc_stream);
     if (Z_OK != error)
     {
-        fprintf(logfile, "decompress_data_block: failed to end, error %d\n", error);
+        fprintf(logfile, "ungzip_data_block: failed to end, error %d\n", error);
         return EIO;
     }
     
     return 0;
 }    
 
-static int read_data_block(FILE *template_file)
+#ifdef BZ2_SUPPORT
+static int unbzip_data_block(char *in_buf, size_t in_len, char *out_buf, size_t out_len)
+{
+    int error = 0;
+    bz_stream uc_stream;
+    
+    uc_stream.bzalloc = NULL;
+    uc_stream.bzfree = NULL;
+    uc_stream.opaque = NULL;
+    uc_stream.next_in = in_buf;
+    uc_stream.avail_in = in_len;
+
+    error = BZ2_bzDecompressInit(&uc_stream, 0, 0);
+    if (BZ_OK != error)
+    {
+        fprintf(logfile, "unbzip_data_block: failed to init, error %d\n", error);
+        return EIO;
+    }
+    
+    uc_stream.next_out = out_buf;
+    uc_stream.avail_out = out_len;
+
+    error = BZ2_bzDecompress(&uc_stream);
+    if (BZ_OK != error && BZ_STREAM_END != error)
+    {
+        fprintf(logfile, "unbzip_data_block: failed to decompress, error %d\n", error);
+        return EIO;
+    }
+    
+    error = BZ2_bzDecompressEnd(&uc_stream);
+    if (BZ_OK != error)
+    {
+        fprintf(logfile, "unbzip_data_block: failed to end, error %d\n", error);
+        return EIO;
+    }
+    
+    return 0;
+}    
+#endif
+
+static int decompress_data_block(char *in_buf, size_t in_len, char *out_buf,
+                                 size_t out_len, int compress_type)
+{
+#ifdef BZ2_SUPPORT
+    if (COMP_BZIP == compress_type)
+        return unbzip_data_block(in_buf, in_len, out_buf, out_len);
+    else
+#endif
+        return ungzip_data_block(in_buf, in_len, out_buf, out_len);
+}
+
+static int read_data_block(FILE *template_file, int compress_type)
 {
     char inbuf[1024];
     off_t i = 0;
@@ -414,7 +473,7 @@ static int read_data_block(FILE *template_file)
     }
 
     error = decompress_data_block(comp_buf, compressed_len,
-                                  zip_state.data_buf, uncompressed_len);
+                                  zip_state.data_buf, uncompressed_len, compress_type);
     if (error)
     {
         fprintf(logfile, "Unable to decompress data block, error %d\n", error);
@@ -428,7 +487,7 @@ static int read_data_block(FILE *template_file)
     return 0;
 }
 
-static int skip_data_block(size_t data_size, FILE *template_file)
+static int skip_data_block(size_t data_size, FILE *template_file, int compress_type)
 {
     int error = 0;
     size_t remaining = data_size;
@@ -440,7 +499,7 @@ static int skip_data_block(size_t data_size, FILE *template_file)
     {
         if (!zip_state.data_buf)
         {
-            error = read_data_block(template_file);
+            error = read_data_block(template_file, compress_type);
             if (error)
             {
                 fprintf(logfile, "Unable to decompress template data, error %d\n",
@@ -463,7 +522,8 @@ static int skip_data_block(size_t data_size, FILE *template_file)
     return error;
 }
 
-static int parse_data_block(size_t data_size, FILE *template_file, struct mk_MD5Context *context)
+static int parse_data_block(size_t data_size, FILE *template_file,
+                            struct mk_MD5Context *context, int compress_type)
 {
     int error = 0;
     size_t remaining = data_size;
@@ -474,7 +534,7 @@ static int parse_data_block(size_t data_size, FILE *template_file, struct mk_MD5
     {
         if (!zip_state.data_buf)
         {
-            error = read_data_block(template_file);
+            error = read_data_block(template_file, compress_type);
             if (error)
             {
                 fprintf(logfile, "Unable to decompress template data, error %d\n",
@@ -709,18 +769,19 @@ static int parse_template_file(char *filename, int sizeonly)
         switch (buf[0])
         {
             
-            case 2: /* unmatched data */
+            case 2: /* unmatched data, gzip */
+            case 8: /* unmatched data, bzip2 */
                 if ((output_offset + extent_size) >= start_offset)
                 {
                     if (skip)
-                        error = skip_data_block(skip, file);
+                        error = skip_data_block(skip, file, buf[0]);
                     if (error)
                     {
                         fprintf(logfile, "Unable to read data block to skip, error %d\n", error);
                         fclose(file);
                         return error;
                     }
-                    error = parse_data_block(read_length, file, &template_context);
+                    error = parse_data_block(read_length, file, &template_context, buf[0]);
                     if (error)
                     {
                         fprintf(logfile, "Unable to read data block, error %d\n", error);
@@ -730,7 +791,7 @@ static int parse_template_file(char *filename, int sizeonly)
                     written_length += read_length;
                 }
                 else
-                    error = skip_data_block(extent_size, file);
+                    error = skip_data_block(extent_size, file, buf[0]);
                 template_offset += 7;
                 break;
             case 6:

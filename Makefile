@@ -5,7 +5,7 @@ CC = gcc
 all: $(BINS)
 
 mkimage: mkimage.o endian.o md5.o
-	$(CC) -o $@ $+ -lz
+	$(CC) -o $@ $+ -lz # -lbz2
 
 clean:
 	rm -f *.o $(BINS) *~
