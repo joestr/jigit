@@ -54,13 +54,14 @@ tarball rather than just a mkisofs patch; the patch is inside the tarball too.
 
 How to use JTE
 
-To use the jigdo creation code, specify the location of the output .jigdo and
-.template files alongside the ISO image. You can also specify the minimum size
-beneath which files will just be dropped into the binary template file data
-rather than listed as separate files to be found on the mirror, and exclude
-patterns to ignore certain files in the same way. And paths in the original
-filesystem can be mapped onto more global namespaces using the [Servers]
-section in the .jigdo file. For example:
+To use the jigdo creation code, specify the location of the output
+.jigdo and .template files alongside the ISO image. You can also
+specify the minimum size beneath which files will just be dropped into
+the binary template file data rather than listed as separate files to
+be found on the mirror, and exclude patterns to ignore certain files
+in the same way. And paths in the original filesystem can be mapped
+onto more global namespaces using the [Servers] section in the .jigdo
+file. For example:
 
 mkisofs -J -r -o /home/steve/test1.iso \
         -jigdo-jigdo /home/steve/test1.jigdo \
@@ -68,19 +69,26 @@ mkisofs -J -r -o /home/steve/test1.iso \
         -jigdo-min-file-size 16384 \
         -jigdo-ignore "README*" \
         -jigdo-map Debian=/mirror/debian \
+        -md5-list /home/steve/md5.list \
         /mirror/jigdo-test
 
-If the -jigdo-* options are not used, the normal mkisofs execution path is not
-affected at all. The above invocation will create 3 output files (.iso, .jigdo
-and .template). Multiple -jigdo-ignore and -jigdo-map options are accepted, for
-multiple ignore and map patterns.
+If the -jigdo-* options are not used, the normal mkisofs execution
+path is not affected at all. The above invocation will create 3 output
+files (.iso, .jigdo and .template). Multiple -jigdo-ignore and
+-jigdo-map options are accepted, for multiple ignore and map patterns.
 
-More options have now been added in version 1.2 so that you can specify the
-location of boot files within the ISO image. Previously the four architectures
-alpha, hppa, mips and mipsel needed separate tools to make an ISO image
-bootable. This also made life very hard when trying to produce jigdo files.
-Instead, I've folded boot support for those architectures into this patch so
-that mkisofs will do all the work:
+Use the -md5-list option to specify the location of a list of files
+and their md5sums in normal md5sum format. mkisofs will then compare
+the checksum of each file it is asked to write against the checksum of
+that file in the list. It will abort on any mismatches.
+
+More options have now been added in version 1.2 so that you can
+specify the location of boot files within the ISO image. Previously
+the four architectures alpha, hppa, mips and mipsel needed separate
+tools to make an ISO image bootable. This also made life very hard
+when trying to produce jigdo files.  Instead, I've folded boot support
+for those architectures into this patch so that mkisofs will do all
+the work:
 
 +-----------------------------------------------------------------------------+
 |Alpha                                                                        |
@@ -213,11 +221,11 @@ What's left to do?
 
  1. Updates to debian-cd to use the new code in production instead of
     jigdo-file.
-    Updated 2004/06/26: Done and testing this now - I'm about to start a
-    JTE-support branch in debian-cd CVS.
+    Updated 2004/07/14: Done: use the jte_support branch in debian-cd
+    CVS if you want to use this.
  2. Work out why HFS hybrid images are too big.
-    Updated 2004/06/26: This seems to be purely the space needed for the HFS
-    information. I'm working on a patch to debian-cd to fix this too.
+    Updated 2004/07/14: This seems to be purely the space needed for the
+    HFS information. I've checked a fix into debian-cd to fix it.
  3. Testing! :-) This is where you lot come in! Please play with this some more
     and let me know if you have any problems, especially with data corruption.
  4. More documentation.
