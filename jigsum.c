@@ -32,7 +32,7 @@ static int check_cache(char *filename, struct stat *sb, char **base64_md5)
 {
     int error = 0;
     db_entry_t *entry;
-    
+
     error = db_lookup_by_name(database, filename, &entry);
     if (!error)
     {
@@ -49,7 +49,7 @@ static int check_cache(char *filename, struct stat *sb, char **base64_md5)
             /* We have an entry for this file, but the mtime or size
              * has changed. Delete the old entry and replace it later
              * on */
-            error = db_delete(database, entry->md5);
+            error = db_delete(database, entry->md5, entry->type, entry->filename);
             if (error)
                 printf("check_cache: unable to delete old entry for file %s\n", filename);
         }
@@ -134,6 +134,8 @@ static int md5_file(char *filename)
         fprintf(stderr, "md5_file: Unable to stat file %s, error %d\n", fullpath, errno);
         return errno;
     }
+    if (S_ISDIR(sb.st_mode))
+        return EISDIR;
     found_in_db = check_cache(fullpath, &sb, &base64_md5);
     if (!found_in_db)
     {
@@ -160,6 +162,7 @@ static int md5_file(char *filename)
         entry.age = UINT_MAX - time(NULL);
         entry.file_size = bytes_read;
         strncpy(&entry.filename[0], fullpath, sizeof(entry.filename));
+        /* "extra" blanked already */
         error = db_store(database, &entry);
         if (error)
             fprintf(stderr, "Unable to write database entry; error %d\n", error);
@@ -179,19 +182,12 @@ static void jigsum_db_cleanup(int delay)
 
     delete_time += delay;
 
-    printf("Time now %X; deleting records older than %X\n",
-           UINT_MAX - (unsigned int)time(NULL), (unsigned int)delete_time);
     while (!error)
     {
         error = db_lookup_by_age(database, delete_time, &entry);
         if (error)
-        {
-            printf("jigsum_db_cleanup: error %d from db_lookup_by_age call\n", error);
             break;
-        }
-        printf("jigsum_db_cleanup: deleting entry %s (time %X)\n",
-               entry->filename, (unsigned int)entry->age);
-        error = db_delete(database, entry->md5);
+        error = db_delete(database, entry->md5, entry->type, entry->filename);
         if (error)
         {
             printf("jigsum_db_cleanup: error %d from delete call\n", error);
@@ -204,7 +200,9 @@ int main(int argc, char **argv)
 {
     int i = 0;
 
-    database = db_open();
+#define DB_NAME "jigit_db.sql"
+
+    database = db_open(DB_NAME);
     if (!database)
     {
         fprintf(stderr, "Unable to open database, error %d\n", errno);
@@ -212,7 +210,7 @@ int main(int argc, char **argv)
     }                
 
     /* Clear out old records */
-    jigsum_db_cleanup(20);
+    jigsum_db_cleanup(86400);
     
     for (i = 1; i < argc; i++)
         (void) md5_file(argv[i]);
