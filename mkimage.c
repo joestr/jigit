@@ -8,7 +8,7 @@
  * GPL v2 - see COPYING
  */
 
-#undef BZ2_SUPPORT
+#define BZ2_SUPPORT
 
 #include <errno.h>
 #include <math.h>
@@ -88,9 +88,16 @@ typedef struct md5_list_
 md5_list_t *md5_list_head = NULL;
 md5_list_t *md5_list_tail = NULL;
 
+typedef enum
+{
+    CT_GZIP,
+    CT_BZIP2
+} ctype_e;
+
 struct
 {
     char   *data_buf;
+    ctype_e algorithm;
     INT64   buf_size;
     INT64   offset_in_curr_buf;
     INT64   total_offset;
@@ -507,14 +514,14 @@ static int decompress_data_block(char *in_buf, INT64 in_len, char *out_buf,
                                  INT64 out_len, int compress_type)
 {
 #ifdef BZ2_SUPPORT
-    if (COMP_BZIP == compress_type)
+    if (CT_BZIP2 == compress_type)
         return unbzip_data_block(in_buf, in_len, out_buf, out_len);
     else
 #endif
         return ungzip_data_block(in_buf, in_len, out_buf, out_len);
 }
 
-static int read_data_block(FILE *template_file, int compress_type)
+static int read_data_block(FILE *template_file)
 {
     char inbuf[1024];
     INT64 i = 0;
@@ -533,6 +540,13 @@ static int read_data_block(FILE *template_file, int compress_type)
         {
             if (!strncmp(&inbuf[i], "DATA", 4))
             {
+                zip_state.algorithm = CT_GZIP;
+                template_offset = i;
+                break;
+            }
+            if (!strncmp(&inbuf[i], "BZIP", 4))
+            {
+                zip_state.algorithm = CT_BZIP2;
                 template_offset = i;
                 break;
             }
@@ -547,7 +561,7 @@ static int read_data_block(FILE *template_file, int compress_type)
     
     fseek(template_file, template_offset, SEEK_SET);
     fread(inbuf, 16, 1, template_file);
-    if (strncmp(inbuf, "DATA", 4))
+    if (strncmp(inbuf, "DATA", 4) && strncmp(inbuf, "BZIP", 4))
     {
         fprintf(logfile, "Unable to locate DATA block in template (offset %lld)\n",
                 template_offset);
@@ -582,7 +596,7 @@ static int read_data_block(FILE *template_file, int compress_type)
     }
 
     error = decompress_data_block(comp_buf, compressed_len,
-                                  zip_state.data_buf, uncompressed_len, compress_type);
+                                  zip_state.data_buf, uncompressed_len, zip_state.algorithm);
     if (error)
     {
         fprintf(logfile, "Unable to decompress data block, error %d\n", error);
@@ -596,7 +610,7 @@ static int read_data_block(FILE *template_file, int compress_type)
     return 0;
 }
 
-static int skip_data_block(INT64 data_size, FILE *template_file, int compress_type)
+static int skip_data_block(INT64 data_size, FILE *template_file)
 {
     int error = 0;
     INT64 remaining = data_size;
@@ -608,7 +622,7 @@ static int skip_data_block(INT64 data_size, FILE *template_file, int compress_ty
     {
         if (!zip_state.data_buf)
         {
-            error = read_data_block(template_file, compress_type);
+            error = read_data_block(template_file);
             if (error)
             {
                 fprintf(logfile, "Unable to decompress template data, error %d\n",
@@ -631,8 +645,7 @@ static int skip_data_block(INT64 data_size, FILE *template_file, int compress_ty
     return error;
 }
 
-static int parse_data_block(INT64 data_size, FILE *template_file,
-                            struct mk_MD5Context *context, int compress_type)
+static int parse_data_block(INT64 data_size, FILE *template_file, struct mk_MD5Context *context)
 {
     int error = 0;
     INT64 remaining = data_size;
@@ -643,7 +656,7 @@ static int parse_data_block(INT64 data_size, FILE *template_file,
     {
         if (!zip_state.data_buf)
         {
-            error = read_data_block(template_file, compress_type);
+            error = read_data_block(template_file);
             if (error)
             {
                 fprintf(logfile, "Unable to decompress template data, error %d\n",
@@ -849,6 +862,10 @@ static int parse_template_file(char *filename, int sizeonly,
             fprintf(logfile, "Failed to open DB file %s, error %d\n", db_filename, errno);
             return errno;
         }
+        /* If we have a DB, then we should cache the template
+         * information in it too. Check and see if there is
+         * information about this template file in the database
+         * already. */
     }
 
     buf = malloc(BUF_SIZE);
@@ -960,22 +977,21 @@ static int parse_template_file(char *filename, int sizeonly,
         switch (buf[0])
         {
             
-            case 2: /* unmatched data, gzip */
-            case 8: /* unmatched data, bzip2 */
+            case 2: /* unmatched data */
                 template_offset += 7;
                 if (missing)
                     break;
                 if ((output_offset + extent_size) >= start_offset)
                 {
                     if (skip)
-                        error = skip_data_block(skip, file, buf[0]);
+                        error = skip_data_block(skip, file);
                     if (error)
                     {
                         fprintf(logfile, "Unable to read data block to skip, error %d\n", error);
                         fclose(file);
                         return error;
                     }
-                    error = parse_data_block(read_length, file, &template_context, buf[0]);
+                    error = parse_data_block(read_length, file, &template_context);
                     if (error)
                     {
                         fprintf(logfile, "Unable to read data block, error %d\n", error);
@@ -985,7 +1001,7 @@ static int parse_template_file(char *filename, int sizeonly,
                     written_length += read_length;
                 }
                 else
-                    error = skip_data_block(extent_size, file, buf[0]);
+                    error = skip_data_block(extent_size, file);
                 break;
             case 6:
                 template_offset += 31;
