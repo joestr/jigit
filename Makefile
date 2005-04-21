@@ -8,7 +8,7 @@ DB_OBJ=jigdb-sql.o
 DBLIB=-lsqlite3
 
 mkimage: mkimage.o endian.o md5.o $(DB_OBJ)
-	$(CC) -o $@ $+ -lz $(DBLIB)
+	$(CC) -o $@ $+ -lz -lbz2 $(DBLIB)
 
 jigsum: jigsum.o md5.o $(DB_OBJ)
 	$(CC) -o $@ $+ $(DBLIB)
