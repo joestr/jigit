@@ -6,6 +6,18 @@
 
 #define JIGDB void
 
+/* Top-level details about a template file */
+typedef struct
+{
+    unsigned long long template_size;           /* The size of the template file */
+    unsigned long long image_size;              /* The size of the output image */
+    time_t             template_mtime;          /* The mtime of the template file */
+    unsigned long      template_index;          /* record number in the template table */
+    unsigned char      template_name[PATH_MAX]; /* The template file name */
+    unsigned char      template_md5[32];        /* MD5 of the template file */
+    unsigned char      image_md5[32];           /* MD5 of the image file */
+} db_template_entry_t;
+
 /* Details about the blocks in the template file; each points to a
  * matched file, or a compressed lump of unmatched data in the
  * template file */
@@ -21,10 +33,10 @@ typedef struct
     unsigned long long size;                    /* Size of the lump */
     unsigned long long uncomp_offset;           /* Offset within the compressed template
                                                    data iff type is BT_BLOCK */
+    unsigned long      template_index;          /* record number in the template table */
     enum blocktype     type;
-    unsigned char      template_name[PATH_MAX]; /* The template we're caching */
     unsigned char      md5[32];                 /* MD5 iff type is BT_FILE */
-} db_template_entry_t;
+} db_block_entry_t;
 
 /* Details about files we know about: local mirror, files in a local
  * ISO image, files listed in the jigdo, etc. */
@@ -63,7 +75,7 @@ typedef struct
                                                    template file */
     unsigned long      uncomp_offset;           /* Start offset when uncompressed */
     unsigned long      uncomp_size;             /* Size of uncompressed block */
-    unsigned char      template_name[PATH_MAX]; /* The template we're caching */
+    unsigned long      template_index;          /* record number in the template table */
 } db_compressed_entry_t;
 
 /*******************
@@ -91,13 +103,26 @@ int db_dump(JIGDB *dbp);
  *
  *******************/
 
-/* Store a template match / non-match block entry */
+/* Store a template entry */
 int db_store_template(JIGDB *dbp, db_template_entry_t *entry);
 
 /* Lookup a template entry by output offset. The specified offset will
  * be within the range covered by the returned entry, or ENOENT. */
-int db_lookup_template_by_offset(JIGDB *dbp, char *template_name,
-                                 unsigned long long image_offset, db_template_entry_t **out);
+int db_lookup_template_by_path(JIGDB *dbp, char *template_name, db_template_entry_t **out);
+
+/********************
+ *
+ * Block functions
+ *
+ *******************/
+
+/* Store a template match / non-match block entry */
+int db_store_block(JIGDB *dbp, db_block_entry_t *entry);
+
+/* Lookup a block by output offset. The specified offset will be
+ * within the range covered by the returned entry, or ENOENT. */
+int db_lookup_block_by_offset(JIGDB *dbp, unsigned long long image_offset,
+                              unsigned long template_index, db_block_entry_t **out);
 
 /****************
  *
@@ -130,10 +155,10 @@ int db_delete_file(JIGDB *dbp, char *md5, enum filetype type, char *filename);
  ***************************/
 
 /* Store details of a block */
-int db_store_block(JIGDB *dbp, db_compressed_entry_t *entry);
+int db_store_compressed(JIGDB *dbp, db_compressed_entry_t *entry);
 
 /* Lookup a block by its UNCOMPRESSED offset */
-int db_lookup_block_by_offset(JIGDB *dbp, char *template_name,
-                              unsigned long uncomp_offset, db_compressed_entry_t **out);
+int db_lookup_compressed_by_offset(JIGDB *dbp, unsigned long uncomp_offset,
+                                   unsigned long template_index, db_compressed_entry_t **out);
 
 #endif /* JIGDB_H */

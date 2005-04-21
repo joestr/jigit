@@ -13,8 +13,9 @@ typedef struct
 enum result_type
 {
     RES_TEMPLATE,
-    RES_FILES,
-    RES_BLOCKS
+    RES_BLOCK,
+    RES_FILE,
+    RES_COMPRESSED
 };
 
 struct results
@@ -25,8 +26,9 @@ struct results
     union
     {
         db_template_entry_t template;
+        db_block_entry_t block;
         db_file_entry_t file;
-        db_compressed_entry_t block;
+        db_compressed_entry_t compressed;
     } data;
 };
 
@@ -36,43 +38,69 @@ struct results *res_tail = NULL;
 
 char sql_command[2 * PATH_MAX];
 
-static int db_create_template_table(db_state_t *dbp)
+static int db_create_templates_table(db_state_t *dbp)
 {
     int error = 0;
     char *open_error;
     
-    /* We can't access the table. Delete it and create new */
-    error = sqlite3_exec(dbp->db, "DROP TABLE template;", NULL, NULL, NULL);
-    sprintf(sql_command, "CREATE TABLE template ("
+    /* Delete the table and create new */
+    error = sqlite3_exec(dbp->db, "DROP TABLE templates;", NULL, NULL, NULL);
+    sprintf(sql_command, "CREATE TABLE templates ("
+            "template_size INTEGER,"
+            "image_size INTEGER,"
+            "template_mtime INTEGER,"
+            "template_index INTEGER PRIMARY KEY,"
+            "template_name VARCHAR(%d),"
+            "template_md5 VARCHAR(32),"
+            "image_md5 VARCHAR(32));", PATH_MAX);
+    error = sqlite3_exec(dbp->db, sql_command, NULL, NULL, &open_error);
+    if (error)
+    {
+        fprintf(stderr, "db_create_templates_table: got error %d (%s) from create\n", error, open_error);
+        if (open_error)
+            sqlite3_free(open_error);
+        return error;
+    }
+    return 0;
+}
+
+static int db_create_blocks_table(db_state_t *dbp)
+{
+    int error = 0;
+    char *open_error;
+    
+    /* Delete the table and create new */
+    error = sqlite3_exec(dbp->db, "DROP TABLE blocks;", NULL, NULL, NULL);
+    sprintf(sql_command, "CREATE TABLE blocks ("
             "image_offset INTEGER,"
             "size INTEGER,"
             "uncomp_offset INTEGER,"
             "type INTEGER,"
-            "templatename VARCHAR(%d),"
-            "md5 VARCHAR(32));", PATH_MAX);
+            "template_index INTEGER,"
+            "md5 VARCHAR(32));");
     error = sqlite3_exec(dbp->db, sql_command, NULL, NULL, &open_error);
     if (error)
     {
-        fprintf(stderr, "db_create_template_table: got error %d (%s) from create\n", error, open_error);
+        fprintf(stderr, "db_create_blocks_table: got error %d (%s) from create\n", error, open_error);
         if (open_error)
             sqlite3_free(open_error);
         return error;
     }
     /* Create indices */
-    sprintf(sql_command, "CREATE INDEX template_offset ON template (uncomp_offset);");
+    sprintf(sql_command, "CREATE INDEX blocks_offset ON blocks (uncomp_offset);");
     error = sqlite3_exec(dbp->db, sql_command, NULL, NULL, &open_error);
     if (error)
     {
-        fprintf(stderr, "db_create_template_table: got error %d (%s) from create index\n", error, open_error);
+        fprintf(stderr, "db_create_blocks_table: got error %d (%s) from create index\n", error, open_error);
         if (open_error)
             sqlite3_free(open_error);
         return error;
     }                                 
-    sprintf(sql_command, "CREATE INDEX template_template ON template (templatename);");
+    sprintf(sql_command, "CREATE INDEX blocks_template ON blocks (template_index);");
     error = sqlite3_exec(dbp->db, sql_command, NULL, NULL, &open_error);
     if (error)
     {
-        fprintf(stderr, "db_create_template_table: got error %d (%s) from create index\n", error, open_error);
+        fprintf(stderr, "db_create_blocks_table: got error %d (%s) from create index\n", error, open_error);
         if (open_error)
             sqlite3_free(open_error);
         return error;
@@ -136,41 +164,41 @@ static int db_create_files_table(db_state_t *dbp)
     return 0;
 }
 
-static int db_create_comp_blocks_table(db_state_t *dbp)
+static int db_create_compressed_table(db_state_t *dbp)
 {
     int error = 0;
     char *open_error;
     
-    /* We can't access the table. Delete it and create new */
-    error = sqlite3_exec(dbp->db, "DROP TABLE blocks;", NULL, NULL, NULL);
-    sprintf(sql_command, "CREATE TABLE blocks ("
+    /* Delete the table and create new */
+    error = sqlite3_exec(dbp->db, "DROP TABLE compressed;", NULL, NULL, NULL);
+    sprintf(sql_command, "CREATE TABLE compressed ("
             "comp_offset INTEGER,"
             "uncomp_offset INTEGER,"
             "uncomp_size INTEGER,"
-            "templatename VARCHAR(%d));", PATH_MAX);
+            "template_index INTEGER);");
     error = sqlite3_exec(dbp->db, sql_command, NULL, NULL, &open_error);
     if (error)
     {
-        fprintf(stderr, "db_create_comp_blocks_table: got error %d (%s) from create\n", error, open_error);
+        fprintf(stderr, "db_create_compressed_table: got error %d (%s) from create\n", error, open_error);
         if (open_error)
             sqlite3_free(open_error);
         return error;
     }
     /* Create indices */
-    sprintf(sql_command, "CREATE INDEX blocks_offset ON blocks (uncomp_offset);");
+    sprintf(sql_command, "CREATE INDEX compressed_offset ON compressed (uncomp_offset);");
     error = sqlite3_exec(dbp->db, sql_command, NULL, NULL, &open_error);
     if (error)
     {
-        fprintf(stderr, "db_create_comp_blocks_table: got error %d (%s) from create index\n", error, open_error);
+        fprintf(stderr, "db_create_compressed_table: got error %d (%s) from create index\n", error, open_error);
         if (open_error)
             sqlite3_free(open_error);
         return error;
     }                                 
-    sprintf(sql_command, "CREATE INDEX blocks_template ON blocks (templatename);");
+    sprintf(sql_command, "CREATE INDEX compressed_template ON compressed (template_index);");
     error = sqlite3_exec(dbp->db, sql_command, NULL, NULL, &open_error);
     if (error)
     {
-        fprintf(stderr, "db_create_comp_blocks_table: got error %d (%s) from create index\n", error, open_error);
+        fprintf(stderr, "db_create_compressed_table: got error %d (%s) from create index\n", error, open_error);
         if (open_error)
             sqlite3_free(open_error);
         return error;
@@ -197,15 +225,15 @@ JIGDB *db_open(char *db_name)
         }
         
         /* We have a database pointer open. Do we need to init the
-         * "files" table? Try to grab the first row of the table and
+         * tables? Try to grab the first row of the templates table and
          * see if we get an error. There has to be a better way than
          * this! */
-        error = sqlite3_exec(dbp->db, "SELECT COUNT(*) FROM files;", NULL, NULL, NULL);
+        error = sqlite3_exec(dbp->db, "SELECT COUNT(*) FROM templates;", NULL, NULL, NULL);
         if (SQLITE_ERROR == error)
         {
             /* No table found, so create new */
             /* First, the template table */
-            error = db_create_template_table(dbp);
+            error = db_create_templates_table(dbp);
             if (error)
             {
                 sqlite3_close(dbp->db);
@@ -213,7 +241,16 @@ JIGDB *db_open(char *db_name)
                 return NULL;
             }
 
-            /* 2. The files table */
+            /* 2. The blocks table */
+            error = db_create_blocks_table(dbp);
+            if (error)
+            {
+                sqlite3_close(dbp->db);
+                errno = error;
+                return NULL;
+            }
+
+            /* 3. The files table */
             error = db_create_files_table(dbp);
             if (error)
             {
@@ -222,8 +259,8 @@ JIGDB *db_open(char *db_name)
                 return NULL;
             }
 
-            /* 3. The compressed blocks table */
-            error = db_create_comp_blocks_table(dbp);
+            /* 4. The compressed blocks table */
+            error = db_create_compressed_table(dbp);
             if (error)
             {
                 sqlite3_close(dbp->db);
@@ -246,24 +283,39 @@ int db_close(JIGDB *dbp)
     return 0;
 }
 
-/* Delete ALL the template and compressed block entries for a
+/* Delete ALL the template, block and compressed entries for a
  * specified template file */
 int db_delete_template_cache(JIGDB *dbp, char *template_name)
 {
     int error = 0;
     db_state_t *state = dbp;
     char *open_error;
-
-    sprintf(sql_command, "DELETE FROM template WHERE templatename == '%s';", template_name);
-    error = sqlite3_exec(state->db, sql_command, NULL, NULL, &open_error);
-    if (error)
-        fprintf(stderr, "db_delete_template_cache: Failed to delete template entries, error %d (%s)\n", error, open_error);
-    else
+    unsigned long template_index = 0;
+    db_template_entry_t *template = NULL;
+    
+    error = db_lookup_template_by_path(dbp, template_name, &template);
+    if (!error)
     {
-        sprintf(sql_command, "DELETE FROM blocks WHERE templatename == '%s';", template_name);
+        template_index = template->template_index;
+
+        sprintf(sql_command, "DELETE FROM blocks WHERE template_index == %ld;", template_index);
         error = sqlite3_exec(state->db, sql_command, NULL, NULL, &open_error);
         if (error)
             fprintf(stderr, "db_delete_template_cache: Failed to delete block entries, error %d (%s)\n", error, open_error);
+        else
+        {
+            sprintf(sql_command, "DELETE FROM compressed WHERE template_index == %ld;", template_index);
+            error = sqlite3_exec(state->db, sql_command, NULL, NULL, &open_error);
+            if (error)
+                fprintf(stderr, "db_delete_template_cache: Failed to delete compressed entries, error %d (%s)\n", error, open_error);
+            else
+            {
+                sprintf(sql_command, "DELETE FROM templates WHERE template_index == %ld;", template_index);
+                error = sqlite3_exec(state->db, sql_command, NULL, NULL, &open_error);
+                if (error)
+                    fprintf(stderr, "db_delete_template_cache: Failed to delete template entry, error %d (%s)\n", error, open_error);
+            }
+        }
     }
     return error;
 }
@@ -312,19 +364,38 @@ static int results_callback(void *pArg, int argc, char **argv, char **columnName
     {
         case RES_TEMPLATE:
             if (argv[0])
-                entry->data.template.image_offset = strtoull(argv[0], NULL, 10);
+                entry->data.template.template_size = strtoull(argv[0], NULL, 10);
             if (argv[1])
-                entry->data.template.size = strtoull(argv[1], NULL, 10);
+                entry->data.template.image_size = strtoull(argv[1], NULL, 10);
             if (argv[2])
-                entry->data.template.uncomp_offset = strtoull(argv[2], NULL, 10);
+                entry->data.template.template_mtime = strtoul(argv[2], NULL, 10);
             if (argv[3])
-                entry->data.template.type = strtoul(argv[3], NULL, 10);
+                entry->data.template.template_index = strtoul(argv[3], NULL, 10);
             if (argv[4])
-                strncpy(entry->data.template.template_name, argv[4], sizeof(entry->data.template.template_name));
+                strncpy(entry->data.template.template_name, argv[4],
+                        sizeof(entry->data.template.template_name));
             if (argv[5])
-                strncpy(entry->data.template.md5, argv[5], sizeof(entry->data.template.md5));
+                strncpy(entry->data.template.template_md5, argv[5],
+                        sizeof(entry->data.template.template_md5));
+            if (argv[6])
+                strncpy(entry->data.template.image_md5, argv[6],
+                        sizeof(entry->data.template.image_md5));
             break;
-        case RES_FILES:
+        case RES_BLOCK:
+            if (argv[0])
+                entry->data.block.image_offset = strtoull(argv[0], NULL, 10);
+            if (argv[1])
+                entry->data.block.size = strtoull(argv[1], NULL, 10);
+            if (argv[2])
+                entry->data.block.uncomp_offset = strtoull(argv[2], NULL, 10);
+            if (argv[3])
+                entry->data.block.type = strtoul(argv[3], NULL, 10);
+            if (argv[4])
+                entry->data.block.template_index = strtoul(argv[4], NULL, 10);
+            if (argv[5])
+                strncpy(entry->data.block.md5, argv[5], sizeof(entry->data.block.md5));
+            break;
+        case RES_FILE:
             if (argv[0])
                 entry->data.file.file_size = strtoull(argv[0], NULL, 10);
             if (argv[1])
@@ -340,15 +411,15 @@ static int results_callback(void *pArg, int argc, char **argv, char **columnName
             if (argv[6])
                 strncpy(entry->data.file.extra, argv[6], sizeof(entry->data.file.extra));
             break;
-        case RES_BLOCKS:
+        case RES_COMPRESSED:
             if (argv[0])
-                entry->data.block.comp_offset = strtoull(argv[0], NULL, 10);
+                entry->data.compressed.comp_offset = strtoull(argv[0], NULL, 10);
             if (argv[1])
-                entry->data.block.uncomp_offset = strtoull(argv[1], NULL, 10);
+                entry->data.compressed.uncomp_offset = strtoull(argv[1], NULL, 10);
             if (argv[2])
-                entry->data.block.uncomp_size = strtoull(argv[2], NULL, 10);
+                entry->data.compressed.uncomp_size = strtoull(argv[2], NULL, 10);
             if (argv[3])
-                strncpy(entry->data.block.template_name, argv[3], sizeof(entry->data.block.template_name));            
+                entry->data.compressed.template_index = strtoul(argv[3], NULL, 10);
             break;
     }
     
@@ -361,9 +432,9 @@ int db_store_template(JIGDB *dbp, db_template_entry_t *entry)
     db_state_t *state = dbp;
     char *open_error;
 
-    sprintf(sql_command, "INSERT INTO template VALUES(%lld,%lld,%lld,%d,'%s','%s');",
-            entry->image_offset, entry->size, entry->uncomp_offset, entry->type,
-            entry->template_name, entry->md5);
+    sprintf(sql_command, "INSERT INTO templates VALUES(%lld,%lld,%ld,%ld,'%s','%s','%s');",
+            entry->template_size, entry->image_size, entry->template_mtime,
+            entry->template_index, entry->template_name, entry->template_md5, entry->image_md5);
     error = sqlite3_exec(state->db, sql_command, NULL, NULL, &open_error);
     if (error)
     {
@@ -375,8 +446,7 @@ int db_store_template(JIGDB *dbp, db_template_entry_t *entry)
     return error;
 }
     
-int db_lookup_template_by_offset(JIGDB *dbp, char *template_name,
-                                 unsigned long long image_offset, db_template_entry_t **out)
+int db_lookup_template_by_path(JIGDB *dbp, char *template_name, db_template_entry_t **out)
 {
     int error = 0;
     db_state_t *state = dbp;
@@ -386,13 +456,12 @@ int db_lookup_template_by_offset(JIGDB *dbp, char *template_name,
     free_results();
 
     sprintf(sql_command,
-            "SELECT * FROM template WHERE template_name == '%s' "
-            "AND image_offset <= %lld "
-            "AND (image_offset + size) > %lld;", template_name, image_offset, image_offset);
+            "SELECT * FROM templates WHERE template_name == '%s';",
+            template_name);
     error = sqlite3_exec(state->db, sql_command, results_callback, &result_type, &open_error);
     if (error)
     {
-        fprintf(stderr, "db_lookup_template_by_offset: Failed to lookup, error %d (%s)\n", error, open_error);
+        fprintf(stderr, "db_lookup_template_by_path: Failed to lookup, error %d (%s)\n", error, open_error);
         return error;
     }
 
@@ -400,6 +469,59 @@ int db_lookup_template_by_offset(JIGDB *dbp, char *template_name,
     if (res_current)
     {
         *out = &res_current->data.template;
+        res_current = res_current->next;
+    }
+    else
+        error = ENOENT;
+
+    return error;
+}    
+
+int db_store_block(JIGDB *dbp, db_block_entry_t *entry)
+{
+    int error = 0;
+    db_state_t *state = dbp;
+    char *open_error;
+
+    sprintf(sql_command, "INSERT INTO blocks VALUES(%lld,%lld,%lld,%d,%ld,'%s');",
+            entry->image_offset, entry->size, entry->uncomp_offset, entry->type,
+            entry->template_index, entry->md5);
+    error = sqlite3_exec(state->db, sql_command, NULL, NULL, &open_error);
+    if (error)
+    {
+        fprintf(stderr, "db_store_block: Failed to write entry, error %d (%s)\n", error, open_error);
+        if (open_error)
+            sqlite3_free(open_error);
+        return error;
+    }
+    return error;
+}
+    
+int db_lookup_block_by_offset(JIGDB *dbp, unsigned long long image_offset,
+                              unsigned long template_index, db_block_entry_t **out)
+{
+    int error = 0;
+    db_state_t *state = dbp;
+    char *open_error;
+    int result_type = RES_BLOCK;
+
+    free_results();
+
+    sprintf(sql_command,
+            "SELECT * FROM blocks WHERE template_index == %ld "
+            "AND image_offset <= %lld "
+            "AND (image_offset + size) > %lld;", template_index, image_offset, image_offset);
+    error = sqlite3_exec(state->db, sql_command, results_callback, &result_type, &open_error);
+    if (error)
+    {
+        fprintf(stderr, "db_lookup_block_by_offset: Failed to lookup, error %d (%s)\n", error, open_error);
+        return error;
+    }
+
+    res_current = res_head;
+    if (res_current)
+    {
+        *out = &res_current->data.block;
         res_current = res_current->next;
     }
     else
@@ -440,7 +562,7 @@ int db_lookup_file_by_age(JIGDB *dbp, time_t age, db_file_entry_t **out)
     int error = 0;
     db_state_t *state = dbp;
     char *open_error;
-    int result_type = RES_FILES;
+    int result_type = RES_FILE;
 
     free_results();
 
@@ -488,7 +610,7 @@ int db_lookup_file_by_md5(JIGDB *dbp, char *md5, db_file_entry_t **out)
     int error = 0;
     db_state_t *state = dbp;
     char *open_error;
-    int result_type = RES_FILES;
+    int result_type = RES_FILE;
 
     free_results();
 
@@ -517,7 +639,7 @@ int db_lookup_file_by_name(JIGDB *dbp, char *filename, db_file_entry_t **out)
     int error = 0;
     db_state_t *state = dbp;
     char *open_error;
-    int result_type = RES_FILES;
+    int result_type = RES_FILE;
 
     free_results();
 
@@ -555,18 +677,18 @@ int db_delete_file(JIGDB *dbp, char *md5, enum filetype type, char *filename)
     return error;
 }
 
-int db_store_block(JIGDB *dbp, db_compressed_entry_t *entry)
+int db_store_compressed(JIGDB *dbp, db_compressed_entry_t *entry)
 {
     int error = 0;
     db_state_t *state = dbp;
     char *open_error;
 
-    sprintf(sql_command, "INSERT INTO blocks VALUES(%ld,%ld,%ld,'%s');",
-            entry->comp_offset, entry->uncomp_offset, entry->uncomp_size, entry->template_name);
+    sprintf(sql_command, "INSERT INTO compressed VALUES(%ld,%ld,%ld,%ld);",
+            entry->comp_offset, entry->uncomp_offset, entry->uncomp_size, entry->template_index);
     error = sqlite3_exec(state->db, sql_command, NULL, NULL, &open_error);
     if (error)
     {
-        fprintf(stderr, "db_store_block: Failed to write entry, error %d (%s)\n", error, open_error);
+        fprintf(stderr, "db_store_compressed: Failed to write entry, error %d (%s)\n", error, open_error);
         if (open_error)
             sqlite3_free(open_error);
         return error;
@@ -574,31 +696,31 @@ int db_store_block(JIGDB *dbp, db_compressed_entry_t *entry)
     return error;
 }
 
-int db_lookup_block_by_offset(JIGDB *dbp, char *template_name,
-                              unsigned long uncomp_offset, db_compressed_entry_t **out)
+int db_lookup_compressed_by_offset(JIGDB *dbp, unsigned long uncomp_offset,
+                                   unsigned long template_index, db_compressed_entry_t **out)
 {
     int error = 0;
     db_state_t *state = dbp;
     char *open_error;
-    int result_type = RES_BLOCKS;
+    int result_type = RES_COMPRESSED;
 
     free_results();
 
     sprintf(sql_command,
-            "SELECT * FROM blocks WHERE template_name == '%s' "
+            "SELECT * FROM compressed WHERE template_index == %ld "
             "AND uncomp_offset <= %ld "
-            "AND (uncomp_offset + size) > %ld;", template_name, uncomp_offset, uncomp_offset);
+            "AND (uncomp_offset + size) > %ld;", template_index, uncomp_offset, uncomp_offset);
     error = sqlite3_exec(state->db, sql_command, results_callback, &result_type, &open_error);
     if (error)
     {
-        fprintf(stderr, "db_lookup_template_by_offset: Failed to lookup, error %d (%s)\n", error, open_error);
+        fprintf(stderr, "db_lookup_compressed_by_offset: Failed to lookup, error %d (%s)\n", error, open_error);
         return error;
     }
 
     res_current = res_head;
     if (res_current)
     {
-        *out = &res_current->data.block;
+        *out = &res_current->data.compressed;
         res_current = res_current->next;
     }
     else
