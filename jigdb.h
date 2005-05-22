@@ -52,7 +52,7 @@ typedef struct
 {
     unsigned long long file_size;          /* size of the file in bytes */
     time_t             mtime;              /* mtime of the file when we saw it */
-    time_t             age;                /* UINT_MAX - time when added */
+    time_t             time_added;         /* time when this record was added */
     enum filetype      type;
     unsigned char      md5[32];            /* md5sum of the file */
     char               filename[PATH_MAX]; /* path to the file */
@@ -106,8 +106,7 @@ int db_dump(JIGDB *dbp);
 /* Store a template entry */
 int db_store_template(JIGDB *dbp, db_template_entry_t *entry);
 
-/* Lookup a template entry by output offset. The specified offset will
- * be within the range covered by the returned entry, or ENOENT. */
+/* Lookup a template entry. */
 int db_lookup_template_by_path(JIGDB *dbp, char *template_name, db_template_entry_t **out);
 
 /********************
@@ -133,17 +132,17 @@ int db_lookup_block_by_offset(JIGDB *dbp, unsigned long long image_offset,
 /* Store details of a file */
 int db_store_file(JIGDB *dbp, db_file_entry_t *entry);
 
-/* Lookup files added older than a specified age */
-int db_lookup_file_by_age(JIGDB *dbp, time_t added, db_file_entry_t **out);
-
-/* Lookup the next older file */
-int db_lookup_file_older(JIGDB *dbp, db_file_entry_t **out);
-
 /* Lookup a file by md5 */
 int db_lookup_file_by_md5(JIGDB *dbp, char *md5, db_file_entry_t **out);
 
 /* Lookup a file by name */
 int db_lookup_file_by_name(JIGDB *dbp, char *filename, db_file_entry_t **out);
+
+/* Delete a file by name */
+int db_delete_file_by_name(JIGDB *dbp, char *md5, enum filetype type, char *filename);
+
+/* Delete files added previous to a specified date */
+int db_delete_files_by_age(JIGDB *dbp, time_t date);
 
 /* Delete a file entry */
 int db_delete_file(JIGDB *dbp, char *md5, enum filetype type, char *filename);

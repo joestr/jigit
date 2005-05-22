@@ -21,6 +21,8 @@
 #include "jigdb.h"
 
 #define BUF_SIZE 65536
+#define OLD_FILE_RECORD_AGE 86400
+#define DB_NAME "jigit_db.sql"
 
 #ifndef MIN
 #define MIN(x,y)        ( ((x) < (y)) ? (x) : (y))
@@ -49,7 +51,7 @@ static int check_cache(char *filename, struct stat *sb, char **base64_md5)
             /* We have an entry for this file, but the mtime or size
              * has changed. Delete the old entry and replace it later
              * on */
-            error = db_delete_file(database, entry->md5, entry->type, entry->filename);
+            error = db_delete_file_by_name(database, entry->md5, entry->type, entry->filename);
             if (error)
                 printf("check_cache: unable to delete old entry for file %s\n", filename);
         }
@@ -159,7 +161,7 @@ static int md5_file(char *filename)
         strncpy(&entry.md5[0], base64_md5, sizeof(entry.md5));
         entry.type = FT_LOCAL;
         entry.mtime = sb.st_mtime;
-        entry.age = UINT_MAX - time(NULL);
+        entry.time_added = time(NULL);
         entry.file_size = bytes_read;
         strncpy(&entry.filename[0], fullpath, sizeof(entry.filename));
         /* "extra" blanked already */
@@ -176,31 +178,12 @@ static int md5_file(char *filename)
 /* Walk through the database deleting entries more than <n> seconds old */
 static void jigsum_db_cleanup(int delay)
 {
-    time_t delete_time = UINT_MAX - time(NULL);
-    int error = 0;
-    db_file_entry_t *entry = NULL;
-
-    delete_time += delay;
-
-    while (!error)
-    {
-        error = db_lookup_file_by_age(database, delete_time, &entry);
-        if (error)
-            break;
-        error = db_delete_file(database, entry->md5, entry->type, entry->filename);
-        if (error)
-        {
-            printf("jigsum_db_cleanup: error %d from delete call\n", error);
-            break;
-        }
-    }
+    (void)db_delete_files_by_age(database, time(NULL) - delay);
 }
 
 int main(int argc, char **argv)
 {
     int i = 0;
-
-#define DB_NAME "jigit_db.sql"
 
     database = db_open(DB_NAME);
     if (!database)
@@ -210,7 +193,7 @@ int main(int argc, char **argv)
     }                
 
     /* Clear out old records */
-    jigsum_db_cleanup(86400);
+    jigsum_db_cleanup(OLD_FILE_RECORD_AGE);
     
     for (i = 1; i < argc; i++)
         (void) md5_file(argv[i]);

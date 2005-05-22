@@ -119,7 +119,7 @@ static int db_create_files_table(db_state_t *dbp)
     sprintf(sql_command, "CREATE TABLE files ("
             "size INTEGER,"
             "mtime INTEGER,"
-            "age INTEGER,"
+            "time_added INTEGER,"
             "filetype INTEGER,"
             "md5 VARCHAR(32),"
             "filename VARCHAR(%d),"
@@ -151,7 +151,7 @@ static int db_create_files_table(db_state_t *dbp)
             sqlite3_free(open_error);
         return error;
     }
-    sprintf(sql_command, "CREATE INDEX files_age ON files (age);");
+    sprintf(sql_command, "CREATE INDEX files_time_added ON files (time_added);");
     error = sqlite3_exec(dbp->db, sql_command, NULL, NULL, &open_error);
     if (error)
     {
@@ -401,7 +401,7 @@ static int results_callback(void *pArg, int argc, char **argv, char **columnName
             if (argv[1])
                 entry->data.file.mtime = strtoul(argv[1], NULL, 10);
             if (argv[2])
-                entry->data.file.age = strtoul(argv[2], NULL, 10);
+                entry->data.file.time_added = strtoul(argv[2], NULL, 10);
             if (argv[3])
                 entry->data.file.type = strtol(argv[3], NULL, 10);
             if (argv[4])
@@ -539,7 +539,7 @@ int db_store_file(JIGDB *dbp, db_file_entry_t *entry)
     sprintf(sql_command, "INSERT INTO files VALUES(%lld,%ld,%ld,%d,'%s','%s','%s');",
             entry->file_size,
             entry->mtime,
-            entry->age,
+            entry->time_added,
             entry->type,
             entry->md5,
             entry->filename,
@@ -552,56 +552,6 @@ int db_store_file(JIGDB *dbp, db_file_entry_t *entry)
             sqlite3_free(open_error);
         return error;
     }
-    return error;
-}
-
-/* Look up the most recent record that is older than the specified
- * age */
-int db_lookup_file_by_age(JIGDB *dbp, time_t age, db_file_entry_t **out)
-{
-    int error = 0;
-    db_state_t *state = dbp;
-    char *open_error;
-    int result_type = RES_FILE;
-
-    free_results();
-
-    sprintf(sql_command, "SELECT * FROM files WHERE age > %ld", age);
-    error = sqlite3_exec(state->db, sql_command, results_callback, &result_type, &open_error);
-    if (error)
-    {
-        fprintf(stderr, "db_lookup_file_by_age: Failed to lookup, error %d (%s)\n", error, open_error);
-        return error;
-    }
-
-    res_current = res_head;
-    if (res_current)
-    {
-        *out = &res_current->data.file;
-        res_current = res_current->next;
-    }
-    else
-        error = ENOENT;
-
-    return error;
-}
-
-/* Look up the next oldest record */
-int db_lookup_file_older(JIGDB *dbp, db_file_entry_t **out)
-{
-    int error = 0;
-
-    if (!res_head)
-        return EINVAL;
-    
-    if (res_current)
-    {
-        *out = &res_current->data.file;
-        res_current = res_current->next;
-    }
-    else
-        error = ENOENT;
-
     return error;
 }
 
@@ -663,13 +613,28 @@ int db_lookup_file_by_name(JIGDB *dbp, char *filename, db_file_entry_t **out)
     return error;
 }
 
-int db_delete_file(JIGDB *dbp, char *md5, enum filetype type, char *filename)
+int db_delete_file_by_name(JIGDB *dbp, char *md5, enum filetype type, char *filename)
 {
     int error = 0;
     db_state_t *state = dbp;
     char *open_error;
 
     sprintf(sql_command, "DELETE FROM files WHERE md5 == '%s' AND filetype == '%d' AND filename == '%s';", md5, type, filename);
+    error = sqlite3_exec(state->db, sql_command, NULL, NULL, &open_error);
+    if (error)
+        fprintf(stderr, "db_delete_file: Failed to delete, error %d (%s)\n", error, open_error);
+
+    return error;
+}
+
+/* Delete all file records older than the specified date */
+int db_delete_files_by_age(JIGDB *dbp, time_t date)
+{
+    int error = 0;
+    db_state_t *state = dbp;
+    char *open_error;
+
+    sprintf(sql_command, "DELETE FROM files WHERE time_added < %ld", date);
     error = sqlite3_exec(state->db, sql_command, NULL, NULL, &open_error);
     if (error)
         fprintf(stderr, "db_delete_file: Failed to delete, error %d (%s)\n", error, open_error);
