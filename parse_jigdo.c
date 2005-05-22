@@ -10,6 +10,7 @@
 #ifdef BZ2_SUPPORT
 #   include <bzlib.h>
 #endif
+#include "jigdb.h"
 #include "jte.h"
 
 INT64 get_file_size(char *filename)
@@ -26,7 +27,7 @@ INT64 get_file_size(char *filename)
 
 md5_list_t *find_file_in_md5_list(unsigned char *base64_md5)
 {
-    md5_list_t *md5_list_entry = md5_list_head;
+    md5_list_t *md5_list_entry = G_md5_list_head;
     
     while (md5_list_entry)
     {        
@@ -49,15 +50,15 @@ static int add_md5_entry(INT64 size, char *md5, char *path)
     new->full_path = path;
     new->file_size = size;
     
-    if (!md5_list_head)
+    if (!G_md5_list_head)
     {
-        md5_list_head = new;
-        md5_list_tail = new;
+        G_md5_list_head = new;
+        G_md5_list_tail = new;
     }
     else
     {
-        md5_list_tail->next = new;
-        md5_list_tail = new;
+        G_md5_list_tail->next = new;
+        G_md5_list_tail = new;
     }
     
     return 0;
@@ -95,7 +96,7 @@ int parse_md5_file(char *filename)
     file = fopen(filename, "rb");
     if (!file)
     {
-        fprintf(logfile, "Failed to open MD5 file %s, error %d!\n", filename, errno);
+        fprintf(G_logfile, "Failed to open MD5 file %s, error %d!\n", filename, errno);
         return errno;
     }
     
@@ -128,7 +129,7 @@ static int file_exists(char *path, INT64 *size)
 static int find_file_in_mirror(char *jigdo_match, char *jigdo_name,
                                char *match, INT64 *file_size, char **mirror_path)
 {
-    match_list_t *entry = match_list_head;
+    match_list_t *entry = G_match_list_head;
     char path[PATH_MAX];
 
     while (entry)
@@ -193,19 +194,19 @@ static int add_file_entry(char *jigdo_entry)
     /* else look for the file in the filesystem */
     if (NULL == match || NULL == jigdo_name)
     {
-        fprintf(logfile, "Could not parse malformed jigdo entry \"%s\"\n", jigdo_entry);
+        fprintf(G_logfile, "Could not parse malformed jigdo entry \"%s\"\n", jigdo_entry);
         return EINVAL;
     }
     error = find_file_in_mirror(match, jigdo_name, match, &file_size, &file_name);
 
     if (error)
 	{
-		if (missing_filename)
+		if (G_missing_filename)
 			add_md5_entry(MISSING, base64_md5, file_name);
 		else
 		{
-			fprintf(logfile, "Unable to find a file to match %s\n", file_name);
-			fprintf(logfile, "Abort!\n");
+			fprintf(G_logfile, "Unable to find a file to match %s\n", file_name);
+			fprintf(G_logfile, "Abort!\n");
 			exit (ENOENT);
 		}
 	}
@@ -226,7 +227,7 @@ int parse_jigdo_file(char *filename)
     file = gzopen(filename, "rb");
     if (!file)
     {
-        fprintf(logfile, "Failed to open jigdo file %s, error %d!\n", filename, errno);
+        fprintf(G_logfile, "Failed to open jigdo file %s, error %d!\n", filename, errno);
         return errno;
     }
 
