@@ -10,6 +10,7 @@
 #ifdef BZ2_SUPPORT
 #   include <bzlib.h>
 #endif
+#include "jigdb.h"
 #include "jte.h"
 
 static int ungzip_data_block(char *in_buf, INT64 in_len, char *out_buf, INT64 out_len)
@@ -25,27 +26,18 @@ static int ungzip_data_block(char *in_buf, INT64 in_len, char *out_buf, INT64 ou
 
     error = inflateInit(&uc_stream);
     if (Z_OK != error)
-    {
-        fprintf(logfile, "ungzip_data_block: failed to init, error %d\n", error);
         return EIO;
-    }
     
     uc_stream.next_out = (unsigned char *)out_buf;
     uc_stream.avail_out = out_len;
 
     error = inflate(&uc_stream, Z_FINISH);
     if (Z_OK != error && Z_STREAM_END != error)
-    {
-        fprintf(logfile, "ungzip_data_block: failed to decompress, error %d\n", error);
         return EIO;
-    }
     
     error = inflateEnd(&uc_stream);
     if (Z_OK != error)
-    {
-        fprintf(logfile, "ungzip_data_block: failed to end, error %d\n", error);
         return EIO;
-    }
     
     return 0;
 }    
@@ -64,27 +56,18 @@ static int unbzip_data_block(char *in_buf, INT64 in_len, char *out_buf, INT64 ou
 
     error = BZ2_bzDecompressInit(&uc_stream, 0, 0);
     if (BZ_OK != error)
-    {
-        fprintf(logfile, "unbzip_data_block: failed to init, error %d\n", error);
         return EIO;
-    }
     
     uc_stream.next_out = out_buf;
     uc_stream.avail_out = out_len;
 
     error = BZ2_bzDecompress(&uc_stream);
     if (BZ_OK != error && BZ_STREAM_END != error)
-    {
-        fprintf(logfile, "unbzip_data_block: failed to decompress, error %d\n", error);
         return EIO;
-    }
     
     error = BZ2_bzDecompressEnd(&uc_stream);
     if (BZ_OK != error)
-    {
-        fprintf(logfile, "unbzip_data_block: failed to end, error %d\n", error);
         return EIO;
-    }
     
     return 0;
 }    
@@ -93,11 +76,18 @@ static int unbzip_data_block(char *in_buf, INT64 in_len, char *out_buf, INT64 ou
 int decompress_data_block(char *in_buf, INT64 in_len, char *out_buf,
                                  INT64 out_len, int compress_type)
 {
+    switch (compress_type)
+    {
 #ifdef BZ2_SUPPORT
-    if (CT_BZIP2 == compress_type)
-        return unbzip_data_block(in_buf, in_len, out_buf, out_len);
-    else
+        case CT_BZIP2:
+            return unbzip_data_block(in_buf, in_len, out_buf, out_len);
+            break;
 #endif
-        return ungzip_data_block(in_buf, in_len, out_buf, out_len);
+        case CT_GZIP:
+            return ungzip_data_block(in_buf, in_len, out_buf, out_len);
+            break;
+        default:
+            return EINVAL;
+    }
 }
 
