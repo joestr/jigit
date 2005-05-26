@@ -37,6 +37,10 @@
 
 #include <string.h>	/* for memcpy() and memset() */
 #include <stdlib.h> /* for calloc() */
+#include <stdio.h>
+#include <errno.h>
+
+#define BUF_SIZE 65536
 
 #include "md5.h"
 
@@ -291,6 +295,45 @@ mk_MD5Transform (buf, inraw)
 	buf[3] += d;
 }
 #endif
+
+int mk_MD5File(char *filename, unsigned char digest[16])
+{
+    int error = 0;
+    FILE *input_file = NULL;
+    unsigned char buf[BUF_SIZE];
+    int num_read = 0;
+    struct mk_MD5Context file_context;
+
+    input_file = fopen(filename, "rb");
+    if (!input_file)
+        return errno;
+
+    mk_MD5Init(&file_context);
+
+    do
+    {
+        num_read = fread(buf, 1, BUF_SIZE, input_file);
+        switch (num_read)
+        {
+            case -1:
+                /* error */
+                fclose(input_file);
+                return errno;
+            case 0:
+                /* we're finished */
+                break;
+            default:
+                mk_MD5Update(&file_context, buf, num_read);
+                break;
+        }
+    } while (num_read);
+
+    fclose(input_file);
+
+    mk_MD5Final(digest, &file_context);
+    
+    return error;
+}
 
 char *base64_dump(unsigned char *buf, size_t buf_size)
 {
