@@ -25,6 +25,18 @@ INT64 get_file_size(char *filename)
         return sb.st_size;
 }
 
+time_t get_file_mtime(char *filename)
+{
+    struct stat sb;
+    int error = 0;
+    
+    error = stat(filename, &sb);
+    if (error)
+        return MISSING;
+    else
+        return sb.st_mtime;
+}
+
 md5_list_t *find_file_in_md5_list(unsigned char *base64_md5)
 {
     md5_list_t *md5_list_entry = G_md5_list_head;
