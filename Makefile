@@ -7,7 +7,7 @@ all: $(BINS)
 DB_OBJ=jigdb-sql.o
 DBLIB=-lsqlite3
 
-mkimage: mkimage.o endian.o md5.o parse_jigdo.o parse_template.o decompress.o $(DB_OBJ)
+mkimage: mkimage.o endian.o md5.o parse_jigdo.o parse_template.o decompress.o jd_interface.o $(DB_OBJ)
 	$(CC) -o $@ $+ -lz -lbz2 $(DBLIB)
 
 jigsum: jigsum.o md5.o $(DB_OBJ)
