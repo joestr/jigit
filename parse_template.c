@@ -318,6 +318,7 @@ static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size, FILE
         if (error && (ENOENT != error))
         {
             fprintf(G_logfile, "Failed to read file %s, error %d\n", filename, error);
+            free(base64_md5);
             return error;
         }
         
@@ -327,12 +328,22 @@ static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size, FILE
             
             if (memcmp(file_md5, md5, 16))
             {
+                char *tmp_md5 = NULL;
+
                 fprintf(G_logfile, "MD5 MISMATCH for file %s\n", filename);
-                fprintf(G_logfile, "    template looking for %s\n", base64_dump(md5, 16));
-                fprintf(G_logfile, "    file %s is    %s\n", filename, base64_dump(file_md5, 16));
+
+                tmp_md5 = base64_dump(md5, 16);
+                fprintf(G_logfile, "    template looking for %s\n", tmp_md5);
+                free(tmp_md5);
+                
+                tmp_md5 = base64_dump(file_md5, 16);
+                fprintf(G_logfile, "    file %s is    %s\n", filename, tmp_md5);
+                free(tmp_md5);
+                free(base64_md5);
                 return EINVAL;
             }
         }
+        free(base64_md5);
         return 0;
     }
     
@@ -343,9 +354,11 @@ static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size, FILE
          (!memcmp(md5_list_entry->md5, base64_md5, 16) ) )
     {
         file_missing(missing, md5_list_entry->full_path);
+        free(base64_md5);
         return 0;
     }
     /* else */
+    free(base64_md5);
     return ENOENT;
 }
 
@@ -388,8 +401,8 @@ int parse_template_file(char *filename, int sizeonly, char *missing,
     fread(buf, 6, 1, file);
     desc_start = file_size - read_le48((unsigned char *)buf);
 
-    /* Now seek back to the beginning image desc block to grab the MD5
-       and image length */
+    /* Now seek back to the beginning of the image desc block to grab
+       the MD5 and image length */
     fseek(file, file_size - 33, SEEK_SET);
     fread(buf, BUF_SIZE, 1, file);
     if (buf[0] != 5) /* image data */
@@ -399,21 +412,7 @@ int parse_template_file(char *filename, int sizeonly, char *missing,
         return EINVAL;
     }
 
-    if (sizeonly)
-    {
-        fclose(file);
-        printf("%lld\n", read_le48((unsigned char *)&buf[1]));
-        return 0;
-    }
-
-    if (G_verbose)
-    {
-        fprintf(G_logfile, "Image MD5 should be    ");
-        for (i = 0; i < 16; i++)
-            fprintf(G_logfile, "%2.2x", (unsigned char)buf[i+7]);
-        fprintf(G_logfile, "\n");
-        fprintf(G_logfile, "Image size should be   %lld bytes\n", read_le48((unsigned char *)&buf[1]));
-    }
+    memcpy(image_md5sum, &buf[7], 16);
 
     G_out_size = read_le48((unsigned char *)&buf[1]);
     
@@ -549,7 +548,252 @@ int parse_template_file(char *filename, int sizeonly, char *missing,
         }
         fprintf(G_logfile, "Output image length is %lld bytes\n", written_length);
     }
-    
+
+    free(buf);
     return 0;
 }
+
+int add_new_template_file(JIGDB *dbp, char *filename)
+{
+    int error = 0;
+    INT64 template_offset = 0;
+    INT64 bytes = 0;
+    char *buf = NULL;
+    FILE *file = NULL;
+    INT64 file_size = 0;
+    INT64 desc_start = 0;
+    INT64 image_offset = 0;
+    INT64 comp_offset = 0;
+    INT64 uncomp_offset = 0;
+    unsigned char tmp_md5sum[16];
+    char *base64_md5 = NULL;
+    db_template_entry_t template;
+    db_block_entry_t block;
+    db_compressed_entry_t compressed;
+    int num_compressed_blocks = 0;
+    int num_data_blocks = 0;
+    int num_file_blocks = 0;
+    
+    file = fopen(filename, "rb");
+    if (!file)
+    {
+        fprintf(G_logfile, "add_new_template_file: Failed to open template file %s, error %d!\n", filename, errno);
+        return errno;
+    }
+
+    buf = malloc(BUF_SIZE);
+    if (!buf)
+    {
+        fprintf(G_logfile, "add_new_template_file: Failed to malloc %d bytes. Abort!\n", BUF_SIZE);
+        fclose(file);
+        return ENOMEM;
+    }
+
+    /* Find the beginning of the desc block */
+    file_size = get_file_size(filename);
+    fseek(file, file_size - 6, SEEK_SET);
+    fread(buf, 6, 1, file);
+    desc_start = file_size - read_le48((unsigned char *)buf);
+
+    /* Now seek back to the beginning image desc block to grab the MD5
+       and image length */
+    fseek(file, file_size - 33, SEEK_SET);
+    fread(buf, BUF_SIZE, 1, file);
+    if (buf[0] != 5) /* image data */
+    {
+        fprintf(G_logfile, "add_new_template_file: Failed to find image desc in the template file\n");
+        fclose(file);
+        return EINVAL;
+    }
+
+    /* Set up an entry in the template table for this template */
+    template.template_size = get_file_size(filename);
+    template.image_size = read_le48((unsigned char *)&buf[1]);
+    template.template_mtime = get_file_mtime(filename);
+    strncpy(template.template_name, filename, sizeof(template.template_name));
+    
+    error = mk_MD5File(filename, tmp_md5sum);
+    if (error)
+    {
+        fprintf(G_logfile, "add_new_template_file: failed to get md5sum of template file %s, error %d\n", filename, error);
+        return error;
+    }
+    base64_md5 = base64_dump(tmp_md5sum, 16);
+    strncpy(template.template_md5, base64_md5, sizeof(template.template_md5));
+    free(base64_md5);
+
+    base64_md5 = base64_dump(&buf[7], 16);
+    strncpy(template.image_md5, base64_md5, sizeof(template.image_md5));
+    free(base64_md5);
+    
+    error = db_store_template(dbp, &template);
+    if (error)
+    {
+        fprintf(G_logfile, "add_new_template_file: failed to store template entry for %s in the DB, error %d\n", filename, error);
+        return error;
+    }
+    
+    /* Now seek back to the start of the desc block and start parsing
+     * the file/data entries to feed into the block table. */
+    fseek(file, desc_start, SEEK_SET);
+    fread(buf, 10, 1, file);
+    if (strncmp(buf, "DESC", 4))
+    {
+        fprintf(G_logfile, "Failed to find desc start in template file %s\n", filename);
+        fclose(file);
+        return EINVAL;
+    }
+    if ((file_size - desc_start) != read_le48((unsigned char *)&buf[4]))
+    {
+        fprintf(G_logfile, "Inconsistent desc length in template file %s!\n", filename);
+        fprintf(G_logfile, "Final chunk says %lld, first chunk says %lld\n",
+                file_size - desc_start, read_le48((unsigned char *)&buf[4]));
+        fclose(file);
+        return EINVAL;
+    }
+
+    template_offset = desc_start + 10;
+
+    strncpy(block.template_id, template.template_md5, sizeof(block.template_id));
+
+    /* Main loop - walk through the template file and dump each entry into the DB */
+    while (1)
+    {
+        INT64 extent_size;
+        INT64 read_length = 0;
+
+        if (template_offset >= (file_size - 33))
+        {
+            if (G_verbose > 1)
+                fprintf(G_logfile, "Reached end of template file\n");
+            break; /* Finished! */
+        }
+        
+        fseek(file, template_offset, SEEK_SET);
+        bytes = fread(buf, (MIN (BUF_SIZE, file_size - template_offset)), 1, file);
+        if (1 != bytes)
+        {
+            fprintf(G_logfile, "Failed to read template file %s!\n", filename);
+            fclose(file);
+            return EINVAL;
+        }
+        
+        extent_size = read_le48((unsigned char *)&buf[1]);
+        read_length = extent_size;
+        
+        switch (buf[0])
+        {            
+            case 2: /* unmatched data */
+                template_offset += 7;
+                block.image_offset = image_offset;
+                block.size = extent_size;
+                block.uncomp_offset = uncomp_offset;
+                strncpy(block.template_id, template.template_md5, sizeof(block.template_id));
+                block.type = 2;                
+                bzero(block.md5, sizeof(block.md5));
+                error = db_store_block(dbp, &block);
+                if (error)
+                {
+                    fprintf(G_logfile, "Failed to store unmatched data block at offset %lld in template file %s!\n", template_offset, filename);
+                    fclose(file);
+                    return error;
+                }
+                num_data_blocks++;
+                uncomp_offset += extent_size;
+                break;
+
+            case 6:
+                template_offset += 31;
+                block.image_offset = image_offset;
+                block.size = extent_size;
+                block.uncomp_offset = 0;
+                block.type = 6;
+                base64_md5 = base64_dump(&buf[15], 16);
+                strncpy(block.md5, base64_md5, sizeof(block.md5));
+                free(base64_md5);
+                error = db_store_block(dbp, &block);
+                if (error)
+                {
+                    fprintf(G_logfile, "Failed to store file block at offset %lld in template file %s!\n", template_offset, filename);
+                    fclose(file);
+                    return error;
+                }
+                num_file_blocks++;
+                break;
+
+            default:
+                fprintf(G_logfile, "Unknown block type %d in template file %s\n", buf[0], filename);
+                fclose(file);
+                return EINVAL;
+        }
+        image_offset += extent_size;
+    }
+
+    if (G_verbose)
+        fprintf(G_logfile, "Template file %s contains %d data blocks and %d file blocks\n",
+                filename, num_data_blocks, num_file_blocks);
+
+    /* Now go back to the start of the template file. Look at all the
+     * compressed blocks and add those to the "compressed" table */
+    /* Find the first compressed block */
+    fseek(file, 0, SEEK_SET);
+    fread(buf, BUF_SIZE, 1, file);
+    for (template_offset = 0; template_offset < BUF_SIZE; template_offset++)
+    {
+        if (!strncmp(&buf[template_offset], "DATA", 4))
+            break;
+        if (!strncmp(&buf[template_offset], "BZIP", 4))
+            break;
+    }
+
+    strncpy(compressed.template_id, template.template_md5, sizeof(compressed.template_id));
+
+    while (1)
+    {
+        /* Now walk through the compressed blocks */
+        fseek(file, template_offset, SEEK_SET);
+        fread(buf, 16, 1, file);
+
+        if (!strncmp(buf, "DATA", 4))
+            compressed.comp_type = CT_GZIP;
+        else if (!strncmp(buf, "BZIP", 4))
+            compressed.comp_type = CT_BZIP2;
+        else if (!strncmp(buf, "DESC", 4))
+            break;
+        else
+        {
+            fprintf(G_logfile, "Failed to find compressed block at offset %lld in template file %s!\n", template_offset, filename);
+            fclose(file);
+            return EINVAL;
+        }
+
+        num_compressed_blocks++;
+        compressed.comp_offset = comp_offset;
+        compressed.uncomp_offset = uncomp_offset;
+        compressed.uncomp_size = read_le48((unsigned char *)&buf[10]);
+
+        uncomp_offset += compressed.uncomp_size;
+        comp_offset += read_le48((unsigned char *)&buf[4]);
+        template_offset += read_le48((unsigned char *)&buf[4]);
+        
+        error = db_store_compressed(dbp, &compressed);
+        if (error)
+        {
+            fprintf(G_logfile, "Failed to store file block at offset %lld in template file %s!\n", template_offset, filename);
+            fclose(file);
+            return error;
+        }
+    }
+
+    if (G_verbose)
+        fprintf(G_logfile, "Template file %s contains %d compressed blocks\n",
+                filename, num_compressed_blocks);
+
+    fclose(file);
+    free(buf);
+    return 0;
+}
+
+
+
 

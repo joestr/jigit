@@ -158,6 +158,7 @@ int main(int argc, char **argv)
     int sizeonly = 0;
     JIGDB *dbp = NULL;
     db_template_entry_t *template;
+    JD *jdp = NULL;
 
     G_logfile = stderr;
     G_outfile = stdout;
@@ -330,9 +331,32 @@ int main(int argc, char **argv)
     if (error)
     {
         /* Not found. Parse it and put the details in the database */
-        
+        error = add_new_template_file(dbp, template_filename);
+        if (error)
+        {
+            fprintf(G_logfile, "Unable to add template file %s to database, error %d\n",
+                    template_filename, error);
+            return error;
+        }
+        error = db_lookup_template_by_path(dbp, template_filename, &template);
+        if (error)
+        {
+            fprintf(G_logfile, "Unable to re-read newly-added template file %s, error %d!\n",
+                    template_filename, error);
+            return error;
+        }
     }
 
+    jdp = jd_open(template_filename);
+    if (!jdp)
+    {
+        error = errno;
+        fprintf(G_logfile, "Unable to open JD interface for template file %s (error %d)\n",
+                template_filename, error);
+        return error;
+    }
+
+#if 0
     /* Read the template file and actually build the image to <outfile> */
     error = parse_template_file(template_filename, sizeonly, G_missing_filename,
                                 G_outfile, output_name, dbp);
@@ -343,6 +367,7 @@ int main(int argc, char **argv)
             fprintf(G_logfile, "%s contains the list of missing files\n", G_missing_filename);
         return error;
     }        
+#endif
 
     fclose(G_logfile);
     return 0;
