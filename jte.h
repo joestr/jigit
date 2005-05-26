@@ -15,12 +15,6 @@ typedef unsigned long      UINT32;
 
 #define JD void
 
-typedef enum
-{
-    CT_GZIP,
-    CT_BZIP2
-} ctype_e;
-
 /* Limited FS-like interface to an ISO image */
 JD *jd_open(char *template_file);
 int jd_read(JD *state, INT64 start_offset, INT64 length, unsigned char *buffer, INT64 *bytes_read);
@@ -70,8 +64,10 @@ int parse_jigdo_file(char *filename);
 int parse_md5_file(char *filename);
 md5_list_t *find_file_in_md5_list(unsigned char *base64_md5);
 INT64 get_file_size(char *filename);
+time_t get_file_mtime(char *filename);
 
 /* parse_template.c */
+int add_new_template_file(JIGDB *dbp, char *filename);
 int parse_template_file(char *filename, int sizeonly, char *missing,
                         FILE *outfile, char *output_name, JIGDB *dbp);
 
