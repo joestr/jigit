@@ -4,6 +4,13 @@
 #include <time.h>
 #include <limits.h>
 
+typedef enum
+{
+    CT_GZIP,
+    CT_BZIP2
+} ctype_e;
+
+
 #define JIGDB void
 
 /* Top-level details about a template file */
@@ -12,10 +19,9 @@ typedef struct
     unsigned long long template_size;           /* The size of the template file */
     unsigned long long image_size;              /* The size of the output image */
     time_t             template_mtime;          /* The mtime of the template file */
-    unsigned long      template_index;          /* record number in the template table */
     unsigned char      template_name[PATH_MAX]; /* The template file name */
-    unsigned char      template_md5[32];        /* MD5 of the template file */
-    unsigned char      image_md5[32];           /* MD5 of the image file */
+    unsigned char      template_md5[33];        /* MD5 of the template file */
+    unsigned char      image_md5[33];           /* MD5 of the image file */
 } db_template_entry_t;
 
 /* Details about the blocks in the template file; each points to a
@@ -33,9 +39,9 @@ typedef struct
     unsigned long long size;                    /* Size of the lump */
     unsigned long long uncomp_offset;           /* Offset within the compressed template
                                                    data iff type is BT_BLOCK */
-    unsigned long      template_index;          /* record number in the template table */
+    unsigned char      template_id[33];         /* MD5 of the template */
     enum blocktype     type;
-    unsigned char      md5[32];                 /* MD5 iff type is BT_FILE */
+    unsigned char      md5[33];                 /* MD5 iff type is BT_FILE */
 } db_block_entry_t;
 
 /* Details about files we know about: local mirror, files in a local
@@ -54,7 +60,7 @@ typedef struct
     time_t             mtime;              /* mtime of the file when we saw it */
     time_t             time_added;         /* time when this record was added */
     enum filetype      type;
-    unsigned char      md5[32];            /* md5sum of the file */
+    unsigned char      md5[33];            /* md5sum of the file */
     char               filename[PATH_MAX]; /* path to the file */
     char               extra[PATH_MAX];    /* empty for local files;
                                             * path to ISO for local ISO loopbacks;
@@ -70,12 +76,16 @@ typedef struct
  * right compressed block. */
 typedef struct
 {
-    unsigned long      comp_offset;             /* Start offset of this compressed block,
+    unsigned long long comp_offset;             /* Start offset of this compressed block,
                                                    measured from the beginning of the
-                                                   template file */
-    unsigned long      uncomp_offset;           /* Start offset when uncompressed */
-    unsigned long      uncomp_size;             /* Size of uncompressed block */
-    unsigned long      template_index;          /* record number in the template table */
+                                                   template file. NOTE: This is NOT the
+                                                   start of the compressed data itself,
+                                                   but the start of the header! */
+    unsigned long long uncomp_offset;           /* Start offset when uncompressed */
+    unsigned long long comp_size;               /* Size of the compressed block */
+    unsigned long long uncomp_size;             /* Size of uncompressed block */
+    ctype_e            comp_type;               /* CT_GZIP or CT_BZIP2 */
+    unsigned char      template_id[33];         /* MD5 of the template */
 } db_compressed_entry_t;
 
 /*******************
@@ -121,7 +131,7 @@ int db_store_block(JIGDB *dbp, db_block_entry_t *entry);
 /* Lookup a block by output offset. The specified offset will be
  * within the range covered by the returned entry, or ENOENT. */
 int db_lookup_block_by_offset(JIGDB *dbp, unsigned long long image_offset,
-                              unsigned long template_index, db_block_entry_t **out);
+                              unsigned char *template_id, db_block_entry_t **out);
 
 /****************
  *
@@ -158,6 +168,6 @@ int db_store_compressed(JIGDB *dbp, db_compressed_entry_t *entry);
 
 /* Lookup a block by its UNCOMPRESSED offset */
 int db_lookup_compressed_by_offset(JIGDB *dbp, unsigned long uncomp_offset,
-                                   unsigned long template_index, db_compressed_entry_t **out);
+                                   unsigned char *template_id, db_compressed_entry_t **out);
 
 #endif /* JIGDB_H */
