@@ -171,6 +171,7 @@ static int rsyncsum_file(char *filename)
             printf("%s\n", base64_sum);
     fflush(stdout);
     
+    free(base64_sum);
     return 0;
 }
 

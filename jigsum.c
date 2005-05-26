@@ -30,7 +30,7 @@
 
 JIGDB *database = NULL;
 
-static int check_cache(char *filename, struct stat *sb, char **base64_md5)
+static int check_cache(char *filename, struct stat *sb, char *base64_md5)
 {
     int error = 0;
     db_file_entry_t *entry;
@@ -43,7 +43,7 @@ static int check_cache(char *filename, struct stat *sb, char **base64_md5)
             /* We have a cache entry already; simply return
              * the cached sum */
         {
-            *base64_md5 = entry->md5;
+            strcpy(base64_md5, entry->md5);
             return 1;
         }
         else
@@ -59,13 +59,14 @@ static int check_cache(char *filename, struct stat *sb, char **base64_md5)
     return 0;
 }
 
-static unsigned long long calculate_md5(char *filename, FILE *file, char **base64_md5)
+static unsigned long long calculate_md5(char *filename, FILE *file, char *base64_md5)
 {
     char buf[BUF_SIZE];
     unsigned char file_md5[16] = {0};
     int done = 0;
     struct mk_MD5Context file_context;
     unsigned long long bytes_read = 0;
+    char *tmp_md5 = NULL;
     
     mk_MD5Init(&file_context);
     while (!done)
@@ -86,14 +87,16 @@ static unsigned long long calculate_md5(char *filename, FILE *file, char **base6
         }
     }    
     mk_MD5Final(file_md5, &file_context);
-    *base64_md5 = base64_dump(file_md5, 16);
+    tmp_md5 = base64_dump(file_md5, 16);
+    strcpy(base64_md5, tmp_md5);
+    free(tmp_md5);
     return bytes_read;
 }
 
 static int md5_file(char *filename)
 {
     FILE *file = NULL;
-    char *base64_md5 = NULL;
+    char base64_md5[33] = {0};
     unsigned long long bytes_read = 0;
     db_file_entry_t entry;
     struct stat sb;
@@ -105,7 +108,7 @@ static int md5_file(char *filename)
     /* Check if we're reading from stdin */
     if (!strcmp("-", filename))
     {
-        (void)calculate_md5("<STDIN>", stdin, &base64_md5);
+        (void)calculate_md5("<STDIN>", stdin, base64_md5);
         printf("%s\n", base64_md5);
         fflush(stdout);
         return 0;
@@ -138,7 +141,7 @@ static int md5_file(char *filename)
     }
     if (S_ISDIR(sb.st_mode))
         return EISDIR;
-    found_in_db = check_cache(fullpath, &sb, &base64_md5);
+    found_in_db = check_cache(fullpath, &sb, base64_md5);
     if (!found_in_db)
     {
         file = fopen(fullpath, "rb");
@@ -155,7 +158,7 @@ static int md5_file(char *filename)
             }
             return errno;
         }
-        bytes_read = calculate_md5(fullpath, file, &base64_md5);
+        bytes_read = calculate_md5(fullpath, file, base64_md5);
         fclose(file);
         memset(&entry, 0, sizeof(entry));
         strncpy(&entry.md5[0], base64_md5, sizeof(entry.md5));
