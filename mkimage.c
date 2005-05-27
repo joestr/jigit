@@ -24,6 +24,7 @@
 #include "endian.h"
 #include "jigdb.h"
 #include "jte.h"
+#include "md5.h"
 
 FILE *G_logfile = NULL;
 FILE *G_outfile = NULL;
@@ -159,6 +160,12 @@ int main(int argc, char **argv)
     JIGDB *dbp = NULL;
     db_template_entry_t *template;
     JD *jdp = NULL;
+    INT64 current_offset = 0;
+    unsigned char data_buf[BUF_SIZE];
+    INT64 bytes_read = 0;
+    INT64 bytes_written = 0;
+    struct mk_MD5Context image_context;
+    unsigned char image_md5[16];
 
     G_logfile = stderr;
     G_outfile = stdout;
@@ -354,6 +361,69 @@ int main(int argc, char **argv)
         fprintf(G_logfile, "Unable to open JD interface for template file %s (error %d)\n",
                 template_filename, error);
         return error;
+    }
+
+    if (!G_quick)
+        mk_MD5Init(&image_context);
+
+    /* Now the main loop - iterate in read/write/md5sum */
+    current_offset = G_start_offset;
+    while (!error && (current_offset < G_end_offset))
+    {
+        error = jd_read(jdp, current_offset, sizeof(data_buf), data_buf, &bytes_read);
+        if (error)
+        {
+            fprintf(G_logfile, "Failed to read %d bytes at offset %lld, error %d\n",
+                    sizeof(data_buf), current_offset, error);
+            break;
+        }
+        if (0 == bytes_read)
+            break;
+        
+        bytes_written = 0;
+        while (bytes_written < bytes_read)
+        {
+            size_t this_write = fwrite(data_buf, 1, bytes_read, G_outfile);
+            if (-1 == this_write)
+            {
+                fprintf(G_logfile, "Failed to write %lld bytes at offset %lld, error %d\n",
+                        bytes_read, current_offset, error);
+                break;
+            }
+            bytes_written += this_write;
+        }
+        
+        if (!G_quick)
+            mk_MD5Update(&image_context, data_buf, bytes_read);
+
+        if (G_verbose)
+        {
+            char *last_file = NULL;                
+            error = jd_last_filename(jdp, &last_file);
+            if (!error && (G_end_offset > G_start_offset))
+                fprintf(G_logfile, "\r %5.2f%%  %-60.60s",
+                        100.0 * (current_offset - G_start_offset) / (G_end_offset - G_start_offset), last_file);
+        }
+    }
+    if (error)
+    {
+        fprintf(G_logfile, "Failed to create image, error %d\n", error);
+        return error;
+    }
+
+    if (G_verbose)
+    {
+        fprintf(G_logfile, "\n");
+        if (!G_quick)
+        {
+            int i = 0;
+            mk_MD5Final (image_md5, &image_context);
+            fprintf(G_logfile, "Output image MD5 is    ");
+            for (i = 0; i < 16; i++)
+                fprintf(G_logfile, "%2.2x", image_md5[i]);
+            fprintf(G_logfile, "\n");
+        }
+        fprintf(G_logfile, "Output image length written is %lld bytes\n", G_end_offset - G_start_offset);
     }
 
 #if 0
