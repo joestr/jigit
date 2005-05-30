@@ -354,7 +354,7 @@ int main(int argc, char **argv)
         }
     }
 
-    jdp = jd_open(template_filename);
+    jdp = jd_open(dbp, template_filename);
     if (!jdp)
     {
         error = errno;

@@ -16,7 +16,7 @@ typedef unsigned long      UINT32;
 #define JD void
 
 /* Limited FS-like interface to an ISO image */
-JD *jd_open(char *template_file);
+JD *jd_open(JIGDB *dbp, char *template_file);
 int jd_read(JD *state, INT64 start_offset, INT64 length, unsigned char *buffer, INT64 *bytes_read);
 int jd_md5(JD *state, unsigned char md5[16]);
 int jd_size(JD *state, INT64 *size);
