@@ -25,5 +25,8 @@ void mk_MD5Transform (mk_uint32 buf[4], const unsigned char in[64]);
 int  mk_MD5File(char *filename, unsigned char digest[16]);
 
 char *base64_dump(unsigned char *buf, size_t buf_size);
+unsigned char *base64_parse(unsigned char *buf, size_t buf_size);
+char *hex_dump(unsigned char *buf, size_t buf_size);
+unsigned char *hex_parse(unsigned char *buf, size_t buf_size);
 
 #endif /* !MD5_H */

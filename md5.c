@@ -341,13 +341,14 @@ char *base64_dump(unsigned char *buf, size_t buf_size)
     int value = 0;
     unsigned int i;
     int bits = 0;
-    char *out = calloc(1, 30);
+    int out_size = (8 * buf_size / 5) + 2;
+    char *out = calloc(1, out_size);
     unsigned int out_pos = 0;
 
     if (!out)
         return NULL;
 
-    for (i = 0; i < buf_size ; i++)
+    for (i = 0; i < buf_size; i++)
     {
         value = (value << 8) | buf[i];
         bits += 2;
@@ -361,6 +362,113 @@ char *base64_dump(unsigned char *buf, size_t buf_size)
     {
         value <<= 6 - bits;
         out[out_pos++] = b64_enc[value & 63U];
+    }
+    return out;
+}
+
+unsigned char *base64_parse(unsigned char *buf, size_t out_buf_size)
+{
+    unsigned int i;
+    unsigned char *out = calloc(1, out_buf_size);
+    unsigned int in_pos = 0;
+    unsigned int out_bits_done = 0;
+    unsigned int in_bits = 0;
+    int in_value = 0;
+    
+    if (!out)
+        return NULL;
+
+    i = 0;
+    while (i < out_buf_size)
+    {
+        while (out_bits_done < 8)
+        {
+            if (!in_bits)
+            {
+                if (buf[in_pos] >= 'A' && buf[in_pos] <= 'Z')
+                    in_value = buf[in_pos] - 'A';
+                else if (buf[in_pos] >= 'a' && buf[in_pos] <= 'z')
+                    in_value = buf[in_pos] - 'a' + 26;
+                else if (buf[in_pos] >= '0' && buf[in_pos] <= '9')
+                    in_value = buf[in_pos] - '0' + 52;
+                else if (buf[in_pos] == '-')
+                    in_value = 62;
+                else if (buf[in_pos] == '_')
+                    in_value = 63;
+                else
+                    fprintf(stderr, "INVALID B64 DIGIT %c\n", buf[in_pos]);
+                in_pos++;
+                in_bits = 6;
+            }
+            out[i] <<= 1;
+            out[i] |= (in_value & 0x20) >> 5;
+            out_bits_done++;
+            in_value = (in_value & 0x1F) << 1;
+            in_bits--;
+        }
+        out_bits_done = 0;
+        i++;
+    }
+    return out;
+}
+
+char *hex_dump(unsigned char *buf, size_t buf_size)
+{
+    int value = 0;
+    unsigned int i;
+    char *out = calloc(1, (buf_size * 2) + 1);
+    unsigned int out_pos = 0;
+
+    if (!out)
+        return NULL;
+
+    for (i = 0; i < buf_size; i++)
+    {
+        value = buf[i];
+        if ( (value & 0xF0) >= 0xA0)
+            out[out_pos++] = ( (value & 0xF0) >> 4 ) - 10 + 'a';
+        else
+            out[out_pos++] = ( (value & 0xF0) >> 4 ) + '0';
+
+        if ( (value & 0x0F) >= 0x0A)
+            out[out_pos++] = (value & 0x0F) - 10 + 'a';
+        else
+            out[out_pos++] = (value & 0x0F) + '0';
+    }
+    return out;
+}
+
+unsigned char *hex_parse(unsigned char *buf, size_t out_buf_size)
+{
+    int value_lo = 0;
+    int value_hi = 0;
+    unsigned int i;
+    unsigned char *out = calloc(1, out_buf_size);
+    
+    if (!out)
+        return NULL;
+
+    for (i = 0; i < out_buf_size; i++)
+    {
+        if (buf[2*i] >= '0' && buf[2*i] <= '9')
+            value_hi = buf[2*i] -  '0';
+        else if (buf[2*i] >= 'a' && buf[2*i] <= 'f')
+            value_hi = buf[2*i] -  'a' + 10;
+        else if (buf[2*i] >= 'A' && buf[2*i] <= 'F')
+            value_hi = buf[2*i] -  'A' + 10;
+        else
+            fprintf(stderr, "INVALID HEX DIGIT %c\n", buf[2*i]);
+
+        if (buf[(2*i)+1] >= '0' && buf[(2*i)+1] <= '9')
+            value_lo = buf[(2*i)+1] -  '0';
+        else if (buf[(2*i)+1] >= 'a' && buf[(2*i)+1] <= 'f')
+            value_lo = buf[(2*i)+1] -  'a' + 10;
+        else if (buf[(2*i)+1] >= 'A' && buf[(2*i)+1] <= 'F')
+            value_lo = buf[(2*i)+1] -  'A' + 10;
+        else
+            fprintf(stderr, "INVALID HEX DIGIT %c\n", buf[(2*i)+1]);
+        
+        out[i] = (value_hi << 4) | value_lo;
     }
     return out;
 }
