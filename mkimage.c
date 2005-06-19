@@ -158,7 +158,7 @@ int main(int argc, char **argv)
     int error = 0;
     int sizeonly = 0;
     JIGDB *dbp = NULL;
-    db_template_entry_t *template;
+    db_template_entry_t template;
     JD *jdp = NULL;
     INT64 current_offset = 0;
     unsigned char data_buf[BUF_SIZE];
@@ -274,9 +274,6 @@ int main(int argc, char **argv)
         }
     }
 
-    if (0 == G_end_offset)
-        G_end_offset = LLONG_MAX;
-
     if ((NULL == jigdo_filename) &&
         (NULL == md5_filename) && 
         (NULL == db_filename) && 
@@ -354,6 +351,15 @@ int main(int argc, char **argv)
         }
     }
 
+    /* Allocate enough space to cache details about 1 compressed lump,
+     * that's all we need here */
+    error = jd_init(1);
+    if (error)
+    {
+        fprintf(G_logfile, "Unable to init JD cache interface, error %d\n", error);
+        return error;
+    }
+
     jdp = jd_open(dbp, template_filename);
     if (!jdp)
     {
@@ -365,6 +371,16 @@ int main(int argc, char **argv)
 
     if (!G_quick)
         mk_MD5Init(&image_context);
+
+    if (0 == G_end_offset)
+    {
+        error = jd_size(jdp, &G_end_offset);
+        if (error)
+        {
+            fprintf(G_logfile, "Unable to read image size from the template information. Error %d\n", error);
+            return error;
+        }
+    }
 
     /* Now the main loop - iterate in read/write/md5sum */
     current_offset = G_start_offset;
@@ -396,6 +412,8 @@ int main(int argc, char **argv)
         if (!G_quick)
             mk_MD5Update(&image_context, data_buf, bytes_read);
 
+        current_offset += bytes_read;
+
         if (G_verbose)
         {
             char *last_file = NULL;                
@@ -416,12 +434,10 @@ int main(int argc, char **argv)
         fprintf(G_logfile, "\n");
         if (!G_quick)
         {
-            int i = 0;
             mk_MD5Final (image_md5, &image_context);
-            fprintf(G_logfile, "Output image MD5 is    ");
-            for (i = 0; i < 16; i++)
-                fprintf(G_logfile, "%2.2x", image_md5[i]);
-            fprintf(G_logfile, "\n");
+            char *out_md5 = hex_dump(image_md5, 16);
+            fprintf(G_logfile, "Output image MD5 is    %s\n", out_md5);
+            free(out_md5);
         }
         fprintf(G_logfile, "Output image length written is %lld bytes\n", G_end_offset - G_start_offset);
     }
