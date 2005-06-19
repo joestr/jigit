@@ -1,3 +1,6 @@
+#include <time.h>
+#include <sys/time.h>
+
 typedef long long INT64;
 typedef unsigned long long UINT64;
 typedef unsigned long      UINT32;
@@ -6,16 +9,26 @@ typedef unsigned long      UINT32;
 #   define LLONG_MAX (INT64)INT_MAX * INT_MAX
 #endif
 
-#define BUF_SIZE 65536
+#define BUF_SIZE 65536 * 8 
 #define MISSING -1
 
 #ifndef MIN
 #define MIN(x,y)        ( ((x) < (y)) ? (x) : (y))
 #endif
 
+typedef struct _jd_time
+{
+    struct timeval tv;
+    struct timezone tz;
+} jd_time_t;
+
+int   jd_timer_init (jd_time_t *timer);
+INT64 jd_timer_count (jd_time_t *timer);
+
 #define JD void
 
 /* Limited FS-like interface to an ISO image */
+int jd_init(int cache_size);
 JD *jd_open(JIGDB *dbp, char *template_file);
 int jd_read(JD *state, INT64 start_offset, INT64 length, unsigned char *buffer, INT64 *bytes_read);
 int jd_md5(JD *state, unsigned char md5[16]);
