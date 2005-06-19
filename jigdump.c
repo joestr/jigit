@@ -37,6 +37,8 @@ typedef enum state_
     ERROR
 } e_state;
 
+UINT64 img_offset = 0;
+
 INT64 find_string(unsigned char *buf, size_t buf_size, char *search)
 {
     size_t length = strlen(search);
@@ -109,7 +111,8 @@ INT64 parse_desc_data(INT64 offset, unsigned char *buf, size_t buf_size)
             skipLen |= (UINT64)buf[4] << 24;
             skipLen |= (UINT64)buf[5] << 32;
             skipLen |= (UINT64)buf[6] << 40;
-            printf("    Unmatched data, %llu bytes\n", skipLen);
+            printf("    Unmatched data, %llu bytes, offset %lld\n", skipLen, img_offset);
+            img_offset += skipLen;
             return 7;
         }
         case 5:
@@ -150,7 +153,8 @@ INT64 parse_desc_data(INT64 offset, unsigned char *buf, size_t buf_size)
             fileLen |= (UINT64)buf[5] << 32;
             fileLen |= (UINT64)buf[6] << 40;
             
-            printf("    File, length %llu bytes\n", fileLen);
+            printf("    File, length %llu bytes, offset %lld\n", fileLen, img_offset);
+            img_offset += fileLen;
             printf("    file rsyncsum: ");
             for (i = 7; i < 15; i++)
                 printf("%2.2x", buf[i]);
