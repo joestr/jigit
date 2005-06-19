@@ -284,7 +284,7 @@ static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size, FILE
     struct mk_MD5Context *use_context = NULL;
     unsigned char file_md5[16];
     md5_list_t *md5_list_entry = NULL;
-    db_file_entry_t *db_entry = NULL;
+    db_file_entry_t db_entry;
     int error = 0;
     char *filename = NULL;
 
@@ -299,7 +299,7 @@ static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size, FILE
     {
         error = db_lookup_file_by_md5(dbp, base64_md5, &db_entry);
         if (!error)
-            filename = db_entry->filename;
+            filename = db_entry.filename;
     }
 
     /* No joy; fall back to the MD5 list */
@@ -566,7 +566,7 @@ int add_new_template_file(JIGDB *dbp, char *filename)
     INT64 comp_offset = 0;
     INT64 uncomp_offset = 0;
     unsigned char tmp_md5sum[16];
-    char *base64_md5 = NULL;
+    char *md5_out = NULL;
     db_template_entry_t template;
     db_block_entry_t block;
     db_compressed_entry_t compressed;
@@ -618,13 +618,13 @@ int add_new_template_file(JIGDB *dbp, char *filename)
         fprintf(G_logfile, "add_new_template_file: failed to get md5sum of template file %s, error %d\n", filename, error);
         return error;
     }
-    base64_md5 = base64_dump(tmp_md5sum, 16);
-    strncpy(template.template_md5, base64_md5, sizeof(template.template_md5));
-    free(base64_md5);
+    md5_out = hex_dump(tmp_md5sum, 16);
+    strncpy(template.template_md5, md5_out, sizeof(template.template_md5));
+    free(md5_out);
 
-    base64_md5 = base64_dump(&buf[7], 16);
-    strncpy(template.image_md5, base64_md5, sizeof(template.image_md5));
-    free(base64_md5);
+    md5_out = hex_dump(&buf[7], 16);
+    strncpy(template.image_md5, md5_out, sizeof(template.image_md5));
+    free(md5_out);
     
     error = db_store_template(dbp, &template);
     if (error)
@@ -708,9 +708,9 @@ int add_new_template_file(JIGDB *dbp, char *filename)
                 block.size = extent_size;
                 block.uncomp_offset = 0;
                 block.type = 6;
-                base64_md5 = base64_dump(&buf[15], 16);
-                strncpy(block.md5, base64_md5, sizeof(block.md5));
-                free(base64_md5);
+                md5_out = hex_dump(&buf[15], 16);
+                strncpy(block.md5, md5_out, sizeof(block.md5));
+                free(md5_out);
                 error = db_store_block(dbp, &block);
                 if (error)
                 {
@@ -748,6 +748,8 @@ int add_new_template_file(JIGDB *dbp, char *filename)
 
     strncpy(compressed.template_id, template.template_md5, sizeof(compressed.template_id));
 
+    comp_offset = template_offset;
+    uncomp_offset = 0;
     while (1)
     {
         /* Now walk through the compressed blocks */
@@ -768,7 +770,8 @@ int add_new_template_file(JIGDB *dbp, char *filename)
         }
 
         num_compressed_blocks++;
-        compressed.comp_offset = comp_offset;
+        compressed.comp_offset = comp_offset + 16;
+        compressed.comp_size = read_le48((unsigned char *)&buf[4]) - 16;
         compressed.uncomp_offset = uncomp_offset;
         compressed.uncomp_size = read_le48((unsigned char *)&buf[10]);
 
@@ -793,7 +796,3 @@ int add_new_template_file(JIGDB *dbp, char *filename)
     free(buf);
     return 0;
 }
-
-
-
-
