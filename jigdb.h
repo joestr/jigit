@@ -10,7 +10,6 @@ typedef enum
     CT_BZIP2
 } ctype_e;
 
-
 #define JIGDB void
 
 /* Top-level details about a template file */
@@ -29,8 +28,8 @@ typedef struct
  * template file */
 enum blocktype
 {
-    BT_FILE = 0,   /* md5 pointer to a file */
-    BT_BLOCK       /* pointer to a block of data from the template file */
+    BT_FILE = 6,   /* md5 pointer to a file */
+    BT_BLOCK = 2   /* pointer to a block of data from the template file */
 };
 
 typedef struct
@@ -117,7 +116,7 @@ int db_dump(JIGDB *dbp);
 int db_store_template(JIGDB *dbp, db_template_entry_t *entry);
 
 /* Lookup a template entry. */
-int db_lookup_template_by_path(JIGDB *dbp, char *template_name, db_template_entry_t **out);
+int db_lookup_template_by_path(JIGDB *dbp, char *template_name, db_template_entry_t *out);
 
 /********************
  *
@@ -131,7 +130,7 @@ int db_store_block(JIGDB *dbp, db_block_entry_t *entry);
 /* Lookup a block by output offset. The specified offset will be
  * within the range covered by the returned entry, or ENOENT. */
 int db_lookup_block_by_offset(JIGDB *dbp, unsigned long long image_offset,
-                              unsigned char *template_id, db_block_entry_t **out);
+                              unsigned char *template_id, db_block_entry_t *out);
 
 /****************
  *
@@ -143,19 +142,19 @@ int db_lookup_block_by_offset(JIGDB *dbp, unsigned long long image_offset,
 int db_store_file(JIGDB *dbp, db_file_entry_t *entry);
 
 /* Lookup a file by md5 */
-int db_lookup_file_by_md5(JIGDB *dbp, char *md5, db_file_entry_t **out);
+int db_lookup_file_by_md5(JIGDB *dbp, unsigned char *md5, db_file_entry_t *out);
 
 /* Lookup a file by name */
-int db_lookup_file_by_name(JIGDB *dbp, char *filename, db_file_entry_t **out);
+int db_lookup_file_by_name(JIGDB *dbp, char *filename, db_file_entry_t *out);
 
 /* Delete a file by name */
-int db_delete_file_by_name(JIGDB *dbp, char *md5, enum filetype type, char *filename);
+int db_delete_file_by_name(JIGDB *dbp, unsigned char *md5, enum filetype type, char *filename);
 
 /* Delete files added previous to a specified date */
 int db_delete_files_by_age(JIGDB *dbp, time_t date);
 
 /* Delete a file entry */
-int db_delete_file(JIGDB *dbp, char *md5, enum filetype type, char *filename);
+int db_delete_file(JIGDB *dbp, unsigned char *md5, enum filetype type, char *filename);
 
 /****************************
  *
@@ -168,6 +167,6 @@ int db_store_compressed(JIGDB *dbp, db_compressed_entry_t *entry);
 
 /* Lookup a block by its UNCOMPRESSED offset */
 int db_lookup_compressed_by_offset(JIGDB *dbp, unsigned long uncomp_offset,
-                                   unsigned char *template_id, db_compressed_entry_t **out);
+                                   unsigned char *template_id, db_compressed_entry_t *out);
 
 #endif /* JIGDB_H */
