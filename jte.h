@@ -36,6 +36,9 @@ int jd_size(JD *state, INT64 *size);
 int jd_last_filename(JD *state, char **name);
 int jd_close(JD *state);
 
+/* Must be implemented by the caller */
+int jd_log(int verbose_level, char *fmt, ...);
+
 typedef struct match_list_
 {
     struct match_list_ *next;
@@ -51,21 +54,8 @@ typedef struct md5_list_
     char *full_path;
 } md5_list_t;
 
-extern match_list_t *G_match_list_head;
-extern match_list_t *G_match_list_tail;
-extern md5_list_t *G_md5_list_head;
-extern md5_list_t *G_md5_list_tail;
-extern FILE *G_logfile;
-extern FILE *G_missing_file;
-extern char *G_missing_filename;
-extern int G_verbose;
-extern int G_quick;
-extern UINT64 G_out_size;
-extern long long G_start_offset;
-extern long long G_end_offset;
-
 /* Interface functions */
-extern void display_progress(FILE *file, char *text);
+void display_progress(int verbose_level, INT64 image_size, INT64 current_offset, char *text);
 extern void file_missing(char *missing, char *filename);
 
 /* decompress.c */
@@ -73,16 +63,18 @@ int decompress_data_block(char *in_buf, INT64 in_len, char *out_buf,
                           INT64 out_len, int compress_type);
 
 /* parse_jigdo.c */
-int parse_jigdo_file(char *filename);
-int parse_md5_file(char *filename);
-md5_list_t *find_file_in_md5_list(unsigned char *base64_md5);
+int parse_jigdo_file(char *filename, md5_list_t **md5_list_head, match_list_t *match_list_head, char *missing_filename);
+int parse_md5_file(char *filename, md5_list_t **md5_list_head);
+md5_list_t *find_file_in_md5_list(unsigned char *base64_md5, md5_list_t **md5_list_head);
 INT64 get_file_size(char *filename);
 time_t get_file_mtime(char *filename);
 
 /* parse_template.c */
 int add_new_template_file(JIGDB *dbp, char *filename);
-int parse_template_file(char *filename, int sizeonly, char *missing,
-                        FILE *outfile, char *output_name, JIGDB *dbp);
+int parse_template_file(char *filename, int sizeonly, int no_md5, char *missing,
+                        FILE *outfile, char *output_name, JIGDB *dbp,
+                        md5_list_t **md5_list_head, FILE *missing_file,
+                        UINT64 start_offset, UINT64 end_offset);
 
 
 

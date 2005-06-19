@@ -72,8 +72,8 @@ static int read_data_block(FILE *template_file)
         }
         if (-1 == template_offset)
         {
-            fprintf(G_logfile, "Unable to locate DATA block in template (offset %lld)\n",
-                    template_offset);
+            jd_log(0, "Unable to locate DATA block in template (offset %lld)\n",
+                   template_offset);
             return EINVAL;
         }    
     }
@@ -82,8 +82,8 @@ static int read_data_block(FILE *template_file)
     fread(inbuf, 16, 1, template_file);
     if (strncmp(inbuf, "DATA", 4) && strncmp(inbuf, "BZIP", 4))
     {
-        fprintf(G_logfile, "Unable to locate DATA block in template (offset %lld)\n",
-                template_offset);
+        jd_log(0, "Unable to locate DATA block in template (offset %lld)\n",
+               template_offset);
         return EINVAL;
     }    
     
@@ -93,24 +93,24 @@ static int read_data_block(FILE *template_file)
     comp_buf = calloc(1, compressed_len);
     if (!comp_buf)
     {
-        fprintf(G_logfile, "Unable to locate DATA block in template (offset %lld)\n",
-                template_offset);
+        jd_log(0, "Unable to locate DATA block in template (offset %lld)\n",
+               template_offset);
         return ENOMEM;
     }
     
     zip_state.data_buf = calloc(1, uncompressed_len);
     if (!zip_state.data_buf)
     {
-        fprintf(G_logfile, "Unable to allocate %lld bytes for decompression\n",
-                uncompressed_len);
+        jd_log(0, "Unable to allocate %lld bytes for decompression\n",
+               uncompressed_len);
         return ENOMEM;
     }
 
     read_num = fread(comp_buf, compressed_len, 1, template_file);
     if (0 == read_num)
     {
-        fprintf(G_logfile, "Unable to read %lld bytes for decompression\n",
-                uncompressed_len);
+        jd_log(0, "Unable to read %lld bytes for decompression\n",
+               uncompressed_len);
         return EIO;
     }
 
@@ -118,7 +118,7 @@ static int read_data_block(FILE *template_file)
                                   zip_state.data_buf, uncompressed_len, zip_state.algorithm);
     if (error)
     {
-        fprintf(G_logfile, "Unable to decompress data block, error %d\n", error);
+        jd_log(0, "Unable to decompress data block, error %d\n", error);
         return error;
     }
         
@@ -144,8 +144,8 @@ static int skip_data_block(INT64 data_size, FILE *template_file)
             error = read_data_block(template_file);
             if (error)
             {
-                fprintf(G_logfile, "Unable to decompress template data, error %d\n",
-                        error);
+                jd_log(0, "Unable to decompress template data, error %d\n",
+                       error);
                 return error;
             }
         }
@@ -160,11 +160,12 @@ static int skip_data_block(INT64 data_size, FILE *template_file)
         }
     }
     
-    fprintf(G_logfile, "skip_data_block: skipped %lld bytes of unmatched data\n", data_size);
+    jd_log(2, "skip_data_block: skipped %lld bytes of unmatched data\n", data_size);
     return error;
 }
 
-static int parse_data_block(INT64 data_size, FILE *template_file, struct mk_MD5Context *context, FILE *outfile)
+static int parse_data_block(INT64 data_size, FILE *template_file, INT64 image_size, INT64 current_offset,
+                            struct mk_MD5Context *context, FILE *outfile, int no_md5)
 {
     int error = 0;
     INT64 remaining = data_size;
@@ -178,8 +179,8 @@ static int parse_data_block(INT64 data_size, FILE *template_file, struct mk_MD5C
             error = read_data_block(template_file);
             if (error)
             {
-                fprintf(G_logfile, "Unable to decompress template data, error %d\n",
-                        error);
+                jd_log(0, "Unable to decompress template data, error %d\n",
+                       error);
                 return error;
             }
         }
@@ -187,14 +188,12 @@ static int parse_data_block(INT64 data_size, FILE *template_file, struct mk_MD5C
         write_size = fwrite(&zip_state.data_buf[zip_state.offset_in_curr_buf], size, 1, outfile);
         if (!write_size)
         {
-            fprintf(G_logfile, "parse_data_block: fwrite %lld failed with error %d; aborting\n", size, ferror(outfile));
+            jd_log(0, "parse_data_block: fwrite %lld failed with error %d; aborting\n", size, ferror(outfile));
             return ferror(outfile);
         }
 
-        if (G_verbose)
-            display_progress(outfile, "template data");
-
-        if (!G_quick)
+        display_progress(1, image_size, current_offset, "template data");
+        if (!no_md5)
             mk_MD5Update(context,
 						 (unsigned char *)&zip_state.data_buf[zip_state.offset_in_curr_buf],
 						 size);
@@ -207,12 +206,12 @@ static int parse_data_block(INT64 data_size, FILE *template_file, struct mk_MD5C
             zip_state.data_buf = NULL;
         }
     }
-    if (G_verbose > 1)
-        fprintf(G_logfile, "parse_data_block: wrote %lld bytes of unmatched data\n", data_size);
+    jd_log(2, "parse_data_block: wrote %lld bytes of unmatched data\n", data_size);
     return error;
 }
 
-static int read_file_data(char *filename, char *missing, INT64 offset, INT64 data_size,
+static int read_file_data(char *filename, char *missing, INT64 image_size, INT64 current_offset,
+                          INT64 offset, INT64 data_size, 
                           struct mk_MD5Context *file_context, struct mk_MD5Context *image_context,
                           FILE *outfile)
 {
@@ -225,8 +224,8 @@ static int read_file_data(char *filename, char *missing, INT64 offset, INT64 dat
     input_file = fopen(filename, "rb");
     if (!input_file)
     {
-        fprintf(G_logfile, "Unable to open mirror file %s, error %d\n",
-                filename, errno);
+        jd_log(0, "Unable to open mirror file %s, error %d\n",
+               filename, errno);
         return errno;
     }
 
@@ -245,8 +244,8 @@ static int read_file_data(char *filename, char *missing, INT64 offset, INT64 dat
         num_read = fread(buf, size, 1, input_file);
         if (!num_read)
         {
-            fprintf(G_logfile, "Unable to read from mirror file %s, error %d (offset %ld, length %d)\n",
-                    filename, errno, ftell(input_file), size);
+            jd_log(0, "Unable to read from mirror file %s, error %d (offset %ld, length %d)\n",
+                   filename, errno, ftell(input_file), size);
             fclose(input_file);
             return errno;
         }
@@ -259,25 +258,22 @@ static int read_file_data(char *filename, char *missing, INT64 offset, INT64 dat
         write_size = fwrite(buf, size, 1, outfile);
         if (!write_size)
         {
-            fprintf(G_logfile, "read_file_data: fwrite %d failed with error %d; aborting\n", size, ferror(outfile));
+            jd_log(0, "read_file_data: fwrite %d failed with error %d; aborting\n", size, ferror(outfile));
             return ferror(outfile);
         }
         
-        if (G_verbose)
-            display_progress(outfile, file_base_name(filename));
-        
+        display_progress(1, image_size, current_offset, file_base_name(filename));        
         remaining -= size;
     }
-    if (G_verbose > 1)
-        fprintf(G_logfile, "read_file_data: wrote %lld bytes of data from %s\n",
-                data_size, filename);
+    jd_log(2, "read_file_data: wrote %lld bytes of data from %s\n", data_size, filename);
     fclose(input_file);
     return 0;
 }
 
-static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size, FILE *outfile,
+static int parse_file_block(INT64 offset, INT64 data_size, INT64 image_size, INT64 current_offset,
+                            INT64 file_size, FILE *outfile,
                             JIGDB *dbp, unsigned char *md5, struct mk_MD5Context *image_context,
-                            char *missing)
+                            char *missing, int no_md5, md5_list_t **md5_list_head)
 {
     char *base64_md5 = base64_dump(md5, 16);
     struct mk_MD5Context file_context;
@@ -288,7 +284,7 @@ static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size, FILE
     int error = 0;
     char *filename = NULL;
 
-    if (!G_quick)
+    if (!no_md5)
     {
         use_context = &file_context;
         mk_MD5Init(use_context);
@@ -305,24 +301,24 @@ static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size, FILE
     /* No joy; fall back to the MD5 list */
     if (!filename)
     {
-        md5_list_entry = find_file_in_md5_list(base64_md5);
+        md5_list_entry = find_file_in_md5_list(base64_md5, md5_list_head);
         if (md5_list_entry && file_size == md5_list_entry->file_size)
             filename = md5_list_entry->full_path;
     }
 
     if (filename)
     {
-        error = read_file_data(filename, missing, offset, data_size,
+        error = read_file_data(filename, missing, image_size, current_offset, offset, data_size,
                                use_context, image_context, outfile);
         
         if (error && (ENOENT != error))
         {
-            fprintf(G_logfile, "Failed to read file %s, error %d\n", filename, error);
+            jd_log(0, "Failed to read file %s, error %d\n", filename, error);
             free(base64_md5);
             return error;
         }
         
-        if (!G_quick)
+        if (!no_md5)
         {
             mk_MD5Final(file_md5, &file_context);
             
@@ -330,14 +326,14 @@ static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size, FILE
             {
                 char *tmp_md5 = NULL;
 
-                fprintf(G_logfile, "MD5 MISMATCH for file %s\n", filename);
+                jd_log(0, "MD5 MISMATCH for file %s\n", filename);
 
                 tmp_md5 = base64_dump(md5, 16);
-                fprintf(G_logfile, "    template looking for %s\n", tmp_md5);
+                jd_log(0, "    template looking for %s\n", tmp_md5);
                 free(tmp_md5);
                 
                 tmp_md5 = base64_dump(file_md5, 16);
-                fprintf(G_logfile, "    file %s is    %s\n", filename, tmp_md5);
+                jd_log(0, "    file %s is    %s\n", filename, tmp_md5);
                 free(tmp_md5);
                 free(base64_md5);
                 return EINVAL;
@@ -362,8 +358,10 @@ static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size, FILE
     return ENOENT;
 }
 
-int parse_template_file(char *filename, int sizeonly, char *missing,
-                        FILE *outfile, char *output_name, JIGDB *dbp)
+int parse_template_file(char *filename, int sizeonly, int no_md5, char *missing,
+                        FILE *outfile, char *output_name, JIGDB *dbp,
+                        md5_list_t **md5_list_head, FILE *missing_file,
+                        UINT64 start_offset, UINT64 end_offset)
 {
     INT64 template_offset = 0;
     INT64 bytes = 0;
@@ -383,14 +381,14 @@ int parse_template_file(char *filename, int sizeonly, char *missing,
     file = fopen(filename, "rb");
     if (!file)
     {
-        fprintf(G_logfile, "Failed to open template file %s, error %d!\n", filename, errno);
+        jd_log(0, "Failed to open template file %s, error %d!\n", filename, errno);
         return errno;
     }
 
     buf = malloc(BUF_SIZE);
     if (!buf)
     {
-        fprintf(G_logfile, "Failed to malloc %d bytes. Abort!\n", BUF_SIZE);
+        jd_log(0, "Failed to malloc %d bytes. Abort!\n", BUF_SIZE);
         fclose(file);
         return ENOMEM;
     }
@@ -407,39 +405,36 @@ int parse_template_file(char *filename, int sizeonly, char *missing,
     fread(buf, BUF_SIZE, 1, file);
     if (buf[0] != 5) /* image data */
     {
-        fprintf(G_logfile, "Failed to find image desc in the template file\n");
+        jd_log(0, "Failed to find image desc in the template file\n");
         fclose(file);
         return EINVAL;
     }
 
     memcpy(image_md5sum, &buf[7], 16);
 
-    G_out_size = read_le48((unsigned char *)&buf[1]);
-    
     /* Now seek back to the start of the desc block */
     fseek(file, desc_start, SEEK_SET);
     fread(buf, 10, 1, file);
     if (strncmp(buf, "DESC", 4))
     {
-        fprintf(G_logfile, "Failed to find desc start in the template file\n");
+        jd_log(0, "Failed to find desc start in the template file\n");
         fclose(file);
         return EINVAL;
     }
     if ((file_size - desc_start) != read_le48((unsigned char *)&buf[4]))
     {
-        fprintf(G_logfile, "Inconsistent desc length in the template file!\n");
-        fprintf(G_logfile, "Final chunk says %lld, first chunk says %lld\n",
-                file_size - desc_start, read_le48((unsigned char *)&buf[4]));
+        jd_log(0, "Inconsistent desc length in the template file!\n");
+        jd_log(0, "Final chunk says %lld, first chunk says %lld\n",
+               file_size - desc_start, read_le48((unsigned char *)&buf[4]));
         fclose(file);
         return EINVAL;
     }
 
-    if (!G_quick)
+    if (!no_md5)
         mk_MD5Init(&template_context);
     template_offset = desc_start + 10;
 
-    if (1 == G_verbose)
-        fprintf(G_logfile, "Creating ISO image %s\n", output_name);
+    jd_log(1, "Creating ISO image %s\n", output_name);
 
     /* Main loop - walk through the template file and expand each entry we find */
     while (1)
@@ -450,14 +445,13 @@ int parse_template_file(char *filename, int sizeonly, char *missing,
 
         if (template_offset >= (file_size - 33))
         {
-            if (G_verbose > 1)
-                fprintf(G_logfile, "Reached end of template file\n");
+            jd_log(2, "Reached end of template file\n");
             break; /* Finished! */
         }
         
-        if (output_offset > G_end_offset) /* Past the range we were asked for */
+        if (output_offset > end_offset) /* Past the range we were asked for */
         {
-            fprintf(G_logfile, "Reached end of range requested\n");            
+            jd_log(2, "Reached end of range requested\n");            
             break;
         }
         
@@ -465,7 +459,7 @@ int parse_template_file(char *filename, int sizeonly, char *missing,
         bytes = fread(buf, (MIN (BUF_SIZE, file_size - template_offset)), 1, file);
         if (1 != bytes)
         {
-            fprintf(G_logfile, "Failed to read template file!\n");
+            jd_log(0, "Failed to read template file!\n");
             fclose(file);
             return EINVAL;
         }
@@ -473,10 +467,10 @@ int parse_template_file(char *filename, int sizeonly, char *missing,
         extent_size = read_le48((unsigned char *)&buf[1]);
         read_length = extent_size;
         
-        if (G_start_offset > output_offset)
-            skip = G_start_offset - output_offset;
-        if ((output_offset + extent_size) > G_end_offset)
-            read_length -= (output_offset + extent_size - G_end_offset - 1);
+        if (start_offset > output_offset)
+            skip = start_offset - output_offset;
+        if ((output_offset + extent_size) > end_offset)
+            read_length -= (output_offset + extent_size - end_offset - 1);
         read_length -= skip;
         
         switch (buf[0])
@@ -486,20 +480,21 @@ int parse_template_file(char *filename, int sizeonly, char *missing,
                 template_offset += 7;
                 if (missing)
                     break;
-                if ((output_offset + extent_size) >= G_start_offset)
+                if ((output_offset + extent_size) >= start_offset)
                 {
                     if (skip)
                         error = skip_data_block(skip, file);
                     if (error)
                     {
-                        fprintf(G_logfile, "Unable to read data block to skip, error %d\n", error);
+                        jd_log(0, "Unable to read data block to skip, error %d\n", error);
                         fclose(file);
                         return error;
                     }
-                    error = parse_data_block(read_length, file, &template_context, outfile);
+                    error = parse_data_block(read_length, file, end_offset - start_offset, output_offset,
+                                             &template_context, outfile, no_md5);
                     if (error)
                     {
-                        fprintf(G_logfile, "Unable to read data block, error %d\n", error);
+                        jd_log(0, "Unable to read data block, error %d\n", error);
                         fclose(file);
                         return error;
                     }
@@ -510,13 +505,15 @@ int parse_template_file(char *filename, int sizeonly, char *missing,
                 break;
             case 6:
                 template_offset += 31;
-                if ((output_offset + extent_size) >= G_start_offset)
+                if ((output_offset + extent_size) >= start_offset)
                 {
-                    error = parse_file_block(skip, read_length, extent_size, outfile, dbp,
-                                             (unsigned char *)&buf[15], &template_context, missing);
+                    error = parse_file_block(skip, read_length, end_offset - start_offset, output_offset,
+                                             extent_size, outfile, dbp,
+                                             (unsigned char *)&buf[15], &template_context, missing,
+                                             no_md5, md5_list_head);
                     if (error)
                     {
-                        fprintf(G_logfile, "Unable to read file block, error %d\n", error);
+                        jd_log(0, "Unable to read file block, error %d\n", error);
                         fclose(file);
                         return error;
                     }
@@ -524,29 +521,26 @@ int parse_template_file(char *filename, int sizeonly, char *missing,
                 }
                 break;
             default:
-                fprintf(G_logfile, "Unknown block type %d!\n", buf[0]);
+                jd_log(0, "Unknown block type %d!\n", buf[0]);
                 fclose(file);
                 return EINVAL;
         }
         output_offset += extent_size;
     }
 
-    if (missing && G_missing_file)
+    if (missing && missing_file)
         return ENOENT;
     
     fclose(file);
-    if (G_verbose)
+    jd_log(1, "\n");
+    if (!no_md5)
     {
-        fprintf(G_logfile, "\n");
-        if (!G_quick)
-        {
-            mk_MD5Final (image_md5sum, &template_context);
-            fprintf(G_logfile, "Output image MD5 is    ");
-            for (i = 0; i < 16; i++)
-                fprintf(G_logfile, "%2.2x", image_md5sum[i]);
-            fprintf(G_logfile, "\n");
-        }
-        fprintf(G_logfile, "Output image length is %lld bytes\n", written_length);
+        mk_MD5Final (image_md5sum, &template_context);
+        jd_log(1, "Output image MD5 is    ");
+        for (i = 0; i < 16; i++)
+            jd_log(1, "%2.2x", image_md5sum[i]);
+        jd_log(1, "\n");
+        jd_log(1, "Output image length is %lld bytes\n", written_length);
     }
 
     free(buf);
@@ -577,14 +571,14 @@ int add_new_template_file(JIGDB *dbp, char *filename)
     file = fopen(filename, "rb");
     if (!file)
     {
-        fprintf(G_logfile, "add_new_template_file: Failed to open template file %s, error %d!\n", filename, errno);
+        jd_log(0, "add_new_template_file: Failed to open template file %s, error %d!\n", filename, errno);
         return errno;
     }
 
     buf = malloc(BUF_SIZE);
     if (!buf)
     {
-        fprintf(G_logfile, "add_new_template_file: Failed to malloc %d bytes. Abort!\n", BUF_SIZE);
+        jd_log(0, "add_new_template_file: Failed to malloc %d bytes. Abort!\n", BUF_SIZE);
         fclose(file);
         return ENOMEM;
     }
@@ -601,7 +595,7 @@ int add_new_template_file(JIGDB *dbp, char *filename)
     fread(buf, BUF_SIZE, 1, file);
     if (buf[0] != 5) /* image data */
     {
-        fprintf(G_logfile, "add_new_template_file: Failed to find image desc in the template file\n");
+        jd_log(0, "add_new_template_file: Failed to find image desc in the template file\n");
         fclose(file);
         return EINVAL;
     }
@@ -615,7 +609,7 @@ int add_new_template_file(JIGDB *dbp, char *filename)
     error = mk_MD5File(filename, tmp_md5sum);
     if (error)
     {
-        fprintf(G_logfile, "add_new_template_file: failed to get md5sum of template file %s, error %d\n", filename, error);
+        jd_log(0, "add_new_template_file: failed to get md5sum of template file %s, error %d\n", filename, error);
         return error;
     }
     md5_out = hex_dump(tmp_md5sum, 16);
@@ -629,7 +623,7 @@ int add_new_template_file(JIGDB *dbp, char *filename)
     error = db_store_template(dbp, &template);
     if (error)
     {
-        fprintf(G_logfile, "add_new_template_file: failed to store template entry for %s in the DB, error %d\n", filename, error);
+        jd_log(0, "add_new_template_file: failed to store template entry for %s in the DB, error %d\n", filename, error);
         return error;
     }
     
@@ -639,15 +633,15 @@ int add_new_template_file(JIGDB *dbp, char *filename)
     fread(buf, 10, 1, file);
     if (strncmp(buf, "DESC", 4))
     {
-        fprintf(G_logfile, "Failed to find desc start in template file %s\n", filename);
+        jd_log(0, "Failed to find desc start in template file %s\n", filename);
         fclose(file);
         return EINVAL;
     }
     if ((file_size - desc_start) != read_le48((unsigned char *)&buf[4]))
     {
-        fprintf(G_logfile, "Inconsistent desc length in template file %s!\n", filename);
-        fprintf(G_logfile, "Final chunk says %lld, first chunk says %lld\n",
-                file_size - desc_start, read_le48((unsigned char *)&buf[4]));
+        jd_log(0, "Inconsistent desc length in template file %s!\n", filename);
+        jd_log(0, "Final chunk says %lld, first chunk says %lld\n",
+               file_size - desc_start, read_le48((unsigned char *)&buf[4]));
         fclose(file);
         return EINVAL;
     }
@@ -664,8 +658,7 @@ int add_new_template_file(JIGDB *dbp, char *filename)
 
         if (template_offset >= (file_size - 33))
         {
-            if (G_verbose > 1)
-                fprintf(G_logfile, "Reached end of template file\n");
+            jd_log(2, "Reached end of template file\n");
             break; /* Finished! */
         }
         
@@ -673,7 +666,7 @@ int add_new_template_file(JIGDB *dbp, char *filename)
         bytes = fread(buf, (MIN (BUF_SIZE, file_size - template_offset)), 1, file);
         if (1 != bytes)
         {
-            fprintf(G_logfile, "Failed to read template file %s!\n", filename);
+            jd_log(0, "Failed to read template file %s!\n", filename);
             fclose(file);
             return EINVAL;
         }
@@ -694,7 +687,7 @@ int add_new_template_file(JIGDB *dbp, char *filename)
                 error = db_store_block(dbp, &block);
                 if (error)
                 {
-                    fprintf(G_logfile, "Failed to store unmatched data block at offset %lld in template file %s!\n", template_offset, filename);
+                    jd_log(0, "Failed to store unmatched data block at offset %lld in template file %s!\n", template_offset, filename);
                     fclose(file);
                     return error;
                 }
@@ -714,7 +707,7 @@ int add_new_template_file(JIGDB *dbp, char *filename)
                 error = db_store_block(dbp, &block);
                 if (error)
                 {
-                    fprintf(G_logfile, "Failed to store file block at offset %lld in template file %s!\n", template_offset, filename);
+                    jd_log(0, "Failed to store file block at offset %lld in template file %s!\n", template_offset, filename);
                     fclose(file);
                     return error;
                 }
@@ -722,16 +715,15 @@ int add_new_template_file(JIGDB *dbp, char *filename)
                 break;
 
             default:
-                fprintf(G_logfile, "Unknown block type %d in template file %s\n", buf[0], filename);
+                jd_log(0, "Unknown block type %d in template file %s\n", buf[0], filename);
                 fclose(file);
                 return EINVAL;
         }
         image_offset += extent_size;
     }
 
-    if (G_verbose)
-        fprintf(G_logfile, "Template file %s contains %d data blocks and %d file blocks\n",
-                filename, num_data_blocks, num_file_blocks);
+    jd_log(1, "Template file %s contains %d data blocks and %d file blocks\n",
+           filename, num_data_blocks, num_file_blocks);
 
     /* Now go back to the start of the template file. Look at all the
      * compressed blocks and add those to the "compressed" table */
@@ -764,7 +756,7 @@ int add_new_template_file(JIGDB *dbp, char *filename)
             break;
         else
         {
-            fprintf(G_logfile, "Failed to find compressed block at offset %lld in template file %s!\n", template_offset, filename);
+            jd_log(0, "Failed to find compressed block at offset %lld in template file %s!\n", template_offset, filename);
             fclose(file);
             return EINVAL;
         }
@@ -782,15 +774,14 @@ int add_new_template_file(JIGDB *dbp, char *filename)
         error = db_store_compressed(dbp, &compressed);
         if (error)
         {
-            fprintf(G_logfile, "Failed to store file block at offset %lld in template file %s!\n", template_offset, filename);
+            jd_log(0, "Failed to store file block at offset %lld in template file %s!\n", template_offset, filename);
             fclose(file);
             return error;
         }
     }
 
-    if (G_verbose)
-        fprintf(G_logfile, "Template file %s contains %d compressed blocks\n",
-                filename, num_compressed_blocks);
+    jd_log(1, "Template file %s contains %d compressed blocks\n",
+           filename, num_compressed_blocks);
 
     fclose(file);
     free(buf);

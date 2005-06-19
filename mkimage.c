@@ -21,6 +21,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <stdarg.h>
 #include "endian.h"
 #include "jigdb.h"
 #include "jte.h"
@@ -59,19 +60,18 @@ extern void file_missing(char *missing, char *filename)
         G_missing_file = fopen(missing, "wb");
         if (!G_missing_file)
         {
-            fprintf(G_logfile, "file_missing: Unable to open missing log %s; error %d\n", missing, errno);
+            jd_log(0, "file_missing: Unable to open missing log %s; error %d\n", missing, errno);
             exit(1);
         }
     }
     fprintf(G_missing_file, "%s\n", filename);
 }
 
-extern void display_progress(FILE *file, char *text)
+void display_progress(int verbose_level, INT64 image_size, INT64 current_offset, char *text)
 {
-    INT64 written = ftello(file);
-    if (G_out_size > 0)
-        fprintf(G_logfile, "\r %5.2f%%  %-60.60s",
-               100.0 * written / G_out_size, text);
+    if ((verbose_level <= G_verbose) && (image_size > 0))
+        jd_log(1, "\r %5.2f%%  %-60.60s",
+               100.0 * current_offset / image_size, text);
 }
 
 static int add_match_entry(char *match)
@@ -95,7 +95,7 @@ static int add_match_entry(char *match)
 
     if (!mirror_path)
     {
-        fprintf(G_logfile, "Could not parse malformed match entry \"%s\"\n", match);
+        jd_log(0, "Could not parse malformed match entry \"%s\"\n", match);
         return EINVAL;
     }        
     
@@ -103,7 +103,7 @@ static int add_match_entry(char *match)
     if (!entry)
         return ENOMEM;
 
-    fprintf(G_logfile, "Adding match entry %s:%s\n", match, mirror_path);
+    jd_log(1, "Adding match entry %s:%s\n", match, mirror_path);
 
     entry->match = match;
     entry->mirror_path = mirror_path;
@@ -198,14 +198,14 @@ int main(int argc, char **argv)
                 G_outfile = fopen(output_name, "wb");
                 if (!G_outfile)
                 {
-                    fprintf(stderr, "Unable to open output file %s\n", optarg);
+                    jd_log(0, "Unable to open output file %s\n", optarg);
                     return errno;
                 }
                 break;
             case 'j':
                 if (jigdo_filename)
                 {
-                    fprintf(G_logfile, "Can only specify one jigdo file!\n");
+                    jd_log(0, "Can only specify one jigdo file!\n");
                     return EINVAL;
                 }
                 /* else */
@@ -214,7 +214,7 @@ int main(int argc, char **argv)
             case 't':
                 if (template_filename)
                 {
-                    fprintf(G_logfile, "Can only specify one template file!\n");
+                    jd_log(0, "Can only specify one template file!\n");
                     return EINVAL;
                 }
                 /* else */
@@ -223,7 +223,7 @@ int main(int argc, char **argv)
             case 'f':
                 if (md5_filename)
                 {
-                    fprintf(G_logfile, "Can only specify one MD5 file!\n");
+                    jd_log(0, "Can only specify one MD5 file!\n");
                     return EINVAL;
                 }
                 /* else */
@@ -232,7 +232,7 @@ int main(int argc, char **argv)
             case 'd':
                 if (db_filename)
                 {
-                    fprintf(G_logfile, "Can only specify one db file!\n");
+                    jd_log(0, "Can only specify one db file!\n");
                     return EINVAL;
                 }
                 /* else */
@@ -247,7 +247,7 @@ int main(int argc, char **argv)
                 G_missing_filename = optarg;
                 break;
             case ':':
-                fprintf(G_logfile, "Missing argument!\n");
+                jd_log(0, "Missing argument!\n");
                 return EINVAL;
                 break;
             case 'h':
@@ -269,7 +269,7 @@ int main(int argc, char **argv)
                 sizeonly = 1;
                 break;
             default:
-                fprintf(G_logfile, "Unknown option!\n");
+                jd_log(0, "Unknown option!\n");
                 return EINVAL;
         }
     }
@@ -279,14 +279,14 @@ int main(int argc, char **argv)
         (NULL == db_filename) && 
         !sizeonly)
     {
-        fprintf(G_logfile, "No jigdo file, DB file or MD5 file specified!\n");
+        jd_log(0, "No jigdo file, DB file or MD5 file specified!\n");
         usage(argv[0]);
         return EINVAL;
     }
     
     if (NULL == template_filename)
     {
-        fprintf(G_logfile, "No template file specified!\n");
+        jd_log(0, "No template file specified!\n");
         usage(argv[0]);
         return EINVAL;
     }    
@@ -294,10 +294,10 @@ int main(int argc, char **argv)
     if (md5_filename)
     {
         /* Build up a list of the files we've been fed */
-        error = parse_md5_file(md5_filename);
+        error = parse_md5_file(md5_filename, &G_md5_list_head);
         if (error)
         {
-            fprintf(G_logfile, "Unable to parse the MD5 file %s\n", md5_filename);
+            jd_log(0, "Unable to parse the MD5 file %s\n", md5_filename);
             return error;
         }
     }
@@ -305,10 +305,10 @@ int main(int argc, char **argv)
     if (jigdo_filename)
     {
         /* Build up a list of file mappings */
-        error = parse_jigdo_file(jigdo_filename);
+        error = parse_jigdo_file(jigdo_filename, &G_md5_list_head, G_match_list_head, G_missing_filename);
         if (error)
         {
-            fprintf(G_logfile, "Unable to parse the jigdo file %s\n", jigdo_filename);
+            jd_log(0, "Unable to parse the jigdo file %s\n", jigdo_filename);
             return error;
         }
     }
@@ -321,7 +321,7 @@ int main(int argc, char **argv)
         dbp = db_open(db_filename);
         if (!dbp)
         {
-            fprintf(G_logfile, "Failed to open DB file %s, error %d\n", db_filename, errno);
+            jd_log(0, "Failed to open DB file %s, error %d\n", db_filename, errno);
             return errno;
         }
         /* If we have a DB, then we should cache the template
@@ -338,15 +338,15 @@ int main(int argc, char **argv)
         error = add_new_template_file(dbp, template_filename);
         if (error)
         {
-            fprintf(G_logfile, "Unable to add template file %s to database, error %d\n",
-                    template_filename, error);
+            jd_log(0, "Unable to add template file %s to database, error %d\n",
+                   template_filename, error);
             return error;
         }
         error = db_lookup_template_by_path(dbp, template_filename, &template);
         if (error)
         {
-            fprintf(G_logfile, "Unable to re-read newly-added template file %s, error %d!\n",
-                    template_filename, error);
+            jd_log(0, "Unable to re-read newly-added template file %s, error %d!\n",
+                   template_filename, error);
             return error;
         }
     }
@@ -356,7 +356,7 @@ int main(int argc, char **argv)
     error = jd_init(1);
     if (error)
     {
-        fprintf(G_logfile, "Unable to init JD cache interface, error %d\n", error);
+        jd_log(0, "Unable to init JD cache interface, error %d\n", error);
         return error;
     }
 
@@ -364,23 +364,23 @@ int main(int argc, char **argv)
     if (!jdp)
     {
         error = errno;
-        fprintf(G_logfile, "Unable to open JD interface for template file %s (error %d)\n",
-                template_filename, error);
+        jd_log(0, "Unable to open JD interface for template file %s (error %d)\n",
+               template_filename, error);
         return error;
     }
 
     if (!G_quick)
         mk_MD5Init(&image_context);
 
-    if (0 == G_end_offset)
+    error = jd_size(jdp, &G_out_size);
+    if (error)
     {
-        error = jd_size(jdp, &G_end_offset);
-        if (error)
-        {
-            fprintf(G_logfile, "Unable to read image size from the template information. Error %d\n", error);
-            return error;
-        }
+        jd_log(0, "Unable to read image size from the template information. Error %d\n", error);
+        return error;
     }
+    
+    if (0 == G_end_offset)
+        G_end_offset = G_out_size;
 
     /* Now the main loop - iterate in read/write/md5sum */
     current_offset = G_start_offset;
@@ -389,8 +389,8 @@ int main(int argc, char **argv)
         error = jd_read(jdp, current_offset, sizeof(data_buf), data_buf, &bytes_read);
         if (error)
         {
-            fprintf(G_logfile, "Failed to read %d bytes at offset %lld, error %d\n",
-                    sizeof(data_buf), current_offset, error);
+            jd_log(0, "Failed to read %d bytes at offset %lld, error %d\n",
+                   sizeof(data_buf), current_offset, error);
             break;
         }
         if (0 == bytes_read)
@@ -402,8 +402,8 @@ int main(int argc, char **argv)
             size_t this_write = fwrite(data_buf, 1, bytes_read, G_outfile);
             if (-1 == this_write)
             {
-                fprintf(G_logfile, "Failed to write %lld bytes at offset %lld, error %d\n",
-                        bytes_read, current_offset, error);
+                jd_log(0, "Failed to write %lld bytes at offset %lld, error %d\n",
+                       bytes_read, current_offset, error);
                 break;
             }
             bytes_written += this_write;
@@ -419,27 +419,27 @@ int main(int argc, char **argv)
             char *last_file = NULL;                
             error = jd_last_filename(jdp, &last_file);
             if (!error && (G_end_offset > G_start_offset))
-                fprintf(G_logfile, "\r %5.2f%%  %-60.60s",
-                        100.0 * (current_offset - G_start_offset) / (G_end_offset - G_start_offset), last_file);
+                jd_log(1, "\r %5.2f%%  %-60.60s",
+                       100.0 * (current_offset - G_start_offset) / (G_end_offset - G_start_offset), last_file);
         }
     }
     if (error)
     {
-        fprintf(G_logfile, "Failed to create image, error %d\n", error);
+        jd_log(0, "Failed to create image, error %d\n", error);
         return error;
     }
 
     if (G_verbose)
     {
-        fprintf(G_logfile, "\n");
+        jd_log(1, "\n");
         if (!G_quick)
         {
             mk_MD5Final (image_md5, &image_context);
             char *out_md5 = hex_dump(image_md5, 16);
-            fprintf(G_logfile, "Output image MD5 is    %s\n", out_md5);
+            jd_log(1, "Output image MD5 is    %s\n", out_md5);
             free(out_md5);
         }
-        fprintf(G_logfile, "Output image length written is %lld bytes\n", G_end_offset - G_start_offset);
+        jd_log(1, "Output image length written is %lld bytes\n", G_end_offset - G_start_offset);
     }
 
 #if 0
@@ -448,9 +448,9 @@ int main(int argc, char **argv)
                                 G_outfile, output_name, dbp);
     if (error)
     {
-        fprintf(G_logfile, "Unable to recreate image from template file %s\n", template_filename);
+        jd_log(0, "Unable to recreate image from template file %s\n", template_filename);
         if (G_missing_filename)
-            fprintf(G_logfile, "%s contains the list of missing files\n", G_missing_filename);
+            jd_log(0, "%s contains the list of missing files\n", G_missing_filename);
         return error;
     }        
 #endif
@@ -459,3 +459,16 @@ int main(int argc, char **argv)
     return 0;
 }
 
+int jd_log(int level, char *fmt, ...)
+{
+    int error = 0;    
+    va_list ap;
+
+    if (level <= G_verbose)
+    {
+        va_start(ap, fmt);
+        error = vfprintf(G_logfile, fmt, ap);
+        va_end(ap);
+    }
+    return error;
+}

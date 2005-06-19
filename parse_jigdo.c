@@ -37,9 +37,9 @@ time_t get_file_mtime(char *filename)
         return sb.st_mtime;
 }
 
-md5_list_t *find_file_in_md5_list(unsigned char *base64_md5)
+md5_list_t *find_file_in_md5_list(unsigned char *base64_md5, md5_list_t **md5_list_head)
 {
-    md5_list_t *md5_list_entry = G_md5_list_head;
+    md5_list_t *md5_list_entry = *md5_list_head;
     
     while (md5_list_entry)
     {        
@@ -51,9 +51,11 @@ md5_list_t *find_file_in_md5_list(unsigned char *base64_md5)
     return NULL; /* Not found */
 }
 
-static int add_md5_entry(INT64 size, char *md5, char *path)
+static int add_md5_entry(INT64 size, char *md5, char *path, md5_list_t **md5_list_head)
 {
     md5_list_t *new = NULL;    
+    static md5_list_t *md5_list_tail = NULL;
+    
     new = calloc(1, sizeof(*new));
     if (!new)
         return ENOMEM;
@@ -62,21 +64,21 @@ static int add_md5_entry(INT64 size, char *md5, char *path)
     new->full_path = path;
     new->file_size = size;
     
-    if (!G_md5_list_head)
+    if (*md5_list_head)
     {
-        G_md5_list_head = new;
-        G_md5_list_tail = new;
+        *md5_list_head = new;
+        md5_list_tail = new;
     }
     else
     {
-        G_md5_list_tail->next = new;
-        G_md5_list_tail = new;
+        md5_list_tail->next = new;
+        md5_list_tail = new;
     }
     
     return 0;
 }
 
-static int parse_md5_entry(char *md5_entry)
+static int parse_md5_entry(char *md5_entry, md5_list_t **md5_list_head)
 {
     int error = 0;
     char *file_name = NULL;
@@ -94,11 +96,11 @@ static int parse_md5_entry(char *md5_entry)
     
     file_size = get_file_size(file_name);
 
-    error = add_md5_entry(file_size, md5, file_name);
+    error = add_md5_entry(file_size, md5, file_name, md5_list_head);
     return 0;
 }
 
-int parse_md5_file(char *filename)
+int parse_md5_file(char *filename, md5_list_t **md5_list_head)
 {
     char buf[2048];
     FILE *file = NULL;
@@ -108,7 +110,7 @@ int parse_md5_file(char *filename)
     file = fopen(filename, "rb");
     if (!file)
     {
-        fprintf(G_logfile, "Failed to open MD5 file %s, error %d!\n", filename, errno);
+        jd_log(0, "Failed to open MD5 file %s, error %d!\n", filename, errno);
         return errno;
     }
     
@@ -117,7 +119,7 @@ int parse_md5_file(char *filename)
         ret = fgets(buf, sizeof(buf), file);
         if (NULL == ret)
             break;
-        error = parse_md5_entry(strdup(buf));
+        error = parse_md5_entry(strdup(buf), md5_list_head);
     }
     return 0;
 }
@@ -138,10 +140,10 @@ static int file_exists(char *path, INT64 *size)
     return 0;
 }
 
-static int find_file_in_mirror(char *jigdo_match, char *jigdo_name,
+static int find_file_in_mirror(match_list_t *match_list_head, char *jigdo_match, char *jigdo_name,
                                char *match, INT64 *file_size, char **mirror_path)
 {
-    match_list_t *entry = G_match_list_head;
+    match_list_t *entry = match_list_head;
     char path[PATH_MAX];
 
     while (entry)
@@ -167,7 +169,8 @@ static int find_file_in_mirror(char *jigdo_match, char *jigdo_name,
    insertion. The entries in the jigdo file should be in the same
    order as the ones we'll want from the template. Simply add to the
    end of the singly-linked list each time! */
-static int add_file_entry(char *jigdo_entry)
+static int add_file_entry(char *jigdo_entry, match_list_t *match_list_head,
+                          md5_list_t **md5_list_head, char *missing_filename)
 {
     int error = 0;
     char *file_name = NULL;
@@ -199,37 +202,35 @@ static int add_file_entry(char *jigdo_entry)
             ptr++;
     }
 
-    if (find_file_in_md5_list(base64_md5))
+    if (find_file_in_md5_list(base64_md5, md5_list_head))
         return 0; /* We already have an entry for this file; don't
                    * waste any more time on it */
 
     /* else look for the file in the filesystem */
     if (NULL == match || NULL == jigdo_name)
     {
-        fprintf(G_logfile, "Could not parse malformed jigdo entry \"%s\"\n", jigdo_entry);
+        jd_log(0, "Could not parse malformed jigdo entry \"%s\"\n", jigdo_entry);
         return EINVAL;
     }
-    error = find_file_in_mirror(match, jigdo_name, match, &file_size, &file_name);
+    error = find_file_in_mirror(match_list_head, match, jigdo_name, match, &file_size, &file_name);
 
     if (error)
 	{
-		if (G_missing_filename)
-			add_md5_entry(MISSING, base64_md5, file_name);
+		if (missing_filename)
+			add_md5_entry(MISSING, base64_md5, file_name, md5_list_head);
 		else
 		{
-			fprintf(G_logfile, "Unable to find a file to match %s\n", file_name);
-			fprintf(G_logfile, "Abort!\n");
+			jd_log(0, "Unable to find a file to match %s\n", file_name);
+			jd_log(0, "Abort!\n");
 			exit (ENOENT);
 		}
 	}
     else
-        add_md5_entry(file_size, base64_md5, file_name);
+        add_md5_entry(file_size, base64_md5, file_name, md5_list_head);
     return 0;
 }
 
-
-
-int parse_jigdo_file(char *filename)
+int parse_jigdo_file(char *filename, md5_list_t **md5_list_head, match_list_t *match_list_head, char *missing_filename)
 {
     char buf[2048];
     gzFile *file = NULL;
@@ -239,7 +240,7 @@ int parse_jigdo_file(char *filename)
     file = gzopen(filename, "rb");
     if (!file)
     {
-        fprintf(G_logfile, "Failed to open jigdo file %s, error %d!\n", filename, errno);
+        jd_log(0, "Failed to open jigdo file %s, error %d!\n", filename, errno);
         return errno;
     }
 
@@ -261,7 +262,7 @@ int parse_jigdo_file(char *filename)
             break;
         if (!strcmp(buf, "[") || !strcmp(buf, "#"))
             continue;
-        error = add_file_entry(strdup(buf));
+        error = add_file_entry(strdup(buf), match_list_head, md5_list_head, missing_filename);
         if (error)
             break;
     }
