@@ -30,20 +30,20 @@
 
 JIGDB *database = NULL;
 
-static int check_cache(char *filename, struct stat *sb, char *base64_md5)
+static int check_cache(char *filename, struct stat *sb, char *md5_out)
 {
     int error = 0;
-    db_file_entry_t *entry;
+    db_file_entry_t entry;
 
     error = db_lookup_file_by_name(database, filename, &entry);
     if (!error)
     {
-        if ( (sb->st_mtime <= entry->mtime) &&
-             (sb->st_size == entry->file_size) )
+        if ( (sb->st_mtime <= entry.mtime) &&
+             (sb->st_size == entry.file_size) )
             /* We have a cache entry already; simply return
              * the cached sum */
         {
-            strcpy(base64_md5, entry->md5);
+            strcpy(md5_out, entry.md5);
             return 1;
         }
         else
@@ -51,7 +51,7 @@ static int check_cache(char *filename, struct stat *sb, char *base64_md5)
             /* We have an entry for this file, but the mtime or size
              * has changed. Delete the old entry and replace it later
              * on */
-            error = db_delete_file_by_name(database, entry->md5, entry->type, entry->filename);
+            error = db_delete_file_by_name(database, entry.md5, entry.type, entry.filename);
             if (error)
                 printf("check_cache: unable to delete old entry for file %s\n", filename);
         }
@@ -59,7 +59,7 @@ static int check_cache(char *filename, struct stat *sb, char *base64_md5)
     return 0;
 }
 
-static unsigned long long calculate_md5(char *filename, FILE *file, char *base64_md5)
+static unsigned long long calculate_md5(char *filename, FILE *file, char *md5_out)
 {
     char buf[BUF_SIZE];
     unsigned char file_md5[16] = {0};
@@ -87,8 +87,8 @@ static unsigned long long calculate_md5(char *filename, FILE *file, char *base64
         }
     }    
     mk_MD5Final(file_md5, &file_context);
-    tmp_md5 = base64_dump(file_md5, 16);
-    strcpy(base64_md5, tmp_md5);
+    tmp_md5 = hex_dump(file_md5, 16);
+    strcpy(md5_out, tmp_md5);
     free(tmp_md5);
     return bytes_read;
 }
@@ -96,7 +96,7 @@ static unsigned long long calculate_md5(char *filename, FILE *file, char *base64
 static int md5_file(char *filename)
 {
     FILE *file = NULL;
-    char base64_md5[33] = {0};
+    char out_md5[33] = {0};
     unsigned long long bytes_read = 0;
     db_file_entry_t entry;
     struct stat sb;
@@ -108,8 +108,8 @@ static int md5_file(char *filename)
     /* Check if we're reading from stdin */
     if (!strcmp("-", filename))
     {
-        (void)calculate_md5("<STDIN>", stdin, base64_md5);
-        printf("%s\n", base64_md5);
+        (void)calculate_md5("<STDIN>", stdin, out_md5);
+        printf("%s\n", out_md5);
         fflush(stdout);
         return 0;
     }
@@ -141,7 +141,7 @@ static int md5_file(char *filename)
     }
     if (S_ISDIR(sb.st_mode))
         return EISDIR;
-    found_in_db = check_cache(fullpath, &sb, base64_md5);
+    found_in_db = check_cache(fullpath, &sb, out_md5);
     if (!found_in_db)
     {
         file = fopen(fullpath, "rb");
@@ -158,10 +158,10 @@ static int md5_file(char *filename)
             }
             return errno;
         }
-        bytes_read = calculate_md5(fullpath, file, base64_md5);
+        bytes_read = calculate_md5(fullpath, file, out_md5);
         fclose(file);
         memset(&entry, 0, sizeof(entry));
-        strncpy(&entry.md5[0], base64_md5, sizeof(entry.md5));
+        strncpy(&entry.md5[0], out_md5, sizeof(entry.md5));
         entry.type = FT_LOCAL;
         entry.mtime = sb.st_mtime;
         entry.time_added = time(NULL);
@@ -173,7 +173,7 @@ static int md5_file(char *filename)
             fprintf(stderr, "Unable to write database entry; error %d\n", error);
     }
 
-    printf("%s  %s\n", base64_md5, fullpath);
+    printf("%s  %s\n", out_md5, fullpath);
     fflush(stdout);
     return 0;
 }
