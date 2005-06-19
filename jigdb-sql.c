@@ -36,12 +36,11 @@ struct results *res_head = NULL;
 struct results *res_current = NULL;
 struct results *res_tail = NULL;
 
-char sql_command[2 * PATH_MAX];
-
 static int db_create_templates_table(db_state_t *dbp)
 {
     int error = 0;
     char *open_error;
+    char sql_command[2 * PATH_MAX];
     
     /* Delete the table and create new */
     error = sqlite3_exec(dbp->db, "DROP TABLE templates;", NULL, NULL, NULL);
@@ -67,6 +66,7 @@ static int db_create_blocks_table(db_state_t *dbp)
 {
     int error = 0;
     char *open_error;
+    char sql_command[2 * PATH_MAX];
     
     /* Delete the table and create new */
     error = sqlite3_exec(dbp->db, "DROP TABLE blocks;", NULL, NULL, NULL);
@@ -112,6 +112,7 @@ static int db_create_files_table(db_state_t *dbp)
 {
     int error = 0;
     char *open_error;
+    char sql_command[2 * PATH_MAX];
     
     /* We can't access the table. Delete it and create new */
     error = sqlite3_exec(dbp->db, "DROP TABLE files;", NULL, NULL, NULL);
@@ -167,6 +168,7 @@ static int db_create_compressed_table(db_state_t *dbp)
 {
     int error = 0;
     char *open_error;
+    char sql_command[2 * PATH_MAX];
     
     /* Delete the table and create new */
     error = sqlite3_exec(dbp->db, "DROP TABLE compressed;", NULL, NULL, NULL);
@@ -292,12 +294,13 @@ int db_delete_template_cache(JIGDB *dbp, char *template_name)
     db_state_t *state = dbp;
     char *open_error;
     unsigned char *template_id = NULL;
-    db_template_entry_t *template = NULL;
+    db_template_entry_t template;
+    char sql_command[2 * PATH_MAX];
     
     error = db_lookup_template_by_path(dbp, template_name, &template);
     if (!error)
     {
-        template_id = template->template_md5;
+        template_id = template.template_md5;
 
         sprintf(sql_command, "DELETE FROM blocks WHERE template_id == '%s';", template_id);
         error = sqlite3_exec(state->db, sql_command, NULL, NULL, &open_error);
@@ -432,6 +435,7 @@ int db_store_template(JIGDB *dbp, db_template_entry_t *entry)
     int error = 0;
     db_state_t *state = dbp;
     char *open_error;
+    char sql_command[2 * PATH_MAX];
 
     sprintf(sql_command, "INSERT INTO templates VALUES(%lld,%lld,%ld,'%s','%s','%s');",
             entry->template_size, entry->image_size, entry->template_mtime,
@@ -447,12 +451,13 @@ int db_store_template(JIGDB *dbp, db_template_entry_t *entry)
     return error;
 }
     
-int db_lookup_template_by_path(JIGDB *dbp, char *template_name, db_template_entry_t **out)
+int db_lookup_template_by_path(JIGDB *dbp, char *template_name, db_template_entry_t *out)
 {
     int error = 0;
     db_state_t *state = dbp;
     char *open_error;
     int result_type = RES_TEMPLATE;
+    char sql_command[2 * PATH_MAX];
 
     free_results();
 
@@ -469,7 +474,7 @@ int db_lookup_template_by_path(JIGDB *dbp, char *template_name, db_template_entr
     res_current = res_head;
     if (res_current)
     {
-        *out = &res_current->data.template;
+        memcpy(out, &res_current->data.template, sizeof(db_template_entry_t));
         res_current = res_current->next;
     }
     else
@@ -483,6 +488,7 @@ int db_store_block(JIGDB *dbp, db_block_entry_t *entry)
     int error = 0;
     db_state_t *state = dbp;
     char *open_error;
+    char sql_command[2 * PATH_MAX];
 
     sprintf(sql_command, "INSERT INTO blocks VALUES(%lld,%lld,%lld,%d,'%s','%s');",
             entry->image_offset, entry->size, entry->uncomp_offset, entry->type,
@@ -499,12 +505,13 @@ int db_store_block(JIGDB *dbp, db_block_entry_t *entry)
 }
     
 int db_lookup_block_by_offset(JIGDB *dbp, unsigned long long image_offset,
-                              unsigned char *template_id, db_block_entry_t **out)
+                              unsigned char *template_id, db_block_entry_t *out)
 {
     int error = 0;
     db_state_t *state = dbp;
     char *open_error;
     int result_type = RES_BLOCK;
+    char sql_command[2 * PATH_MAX];
 
     free_results();
 
@@ -522,7 +529,7 @@ int db_lookup_block_by_offset(JIGDB *dbp, unsigned long long image_offset,
     res_current = res_head;
     if (res_current)
     {
-        *out = &res_current->data.block;
+        memcpy(out, &res_current->data.block, sizeof(db_block_entry_t));
         res_current = res_current->next;
     }
     else
@@ -536,6 +543,7 @@ int db_store_file(JIGDB *dbp, db_file_entry_t *entry)
     int error = 0;
     db_state_t *state = dbp;
     char *open_error;
+    char sql_command[2 * PATH_MAX];
     
     sprintf(sql_command, "INSERT INTO files VALUES(%lld,%ld,%ld,%d,'%s','%s','%s');",
             entry->file_size,
@@ -556,12 +564,13 @@ int db_store_file(JIGDB *dbp, db_file_entry_t *entry)
     return error;
 }
 
-int db_lookup_file_by_md5(JIGDB *dbp, char *md5, db_file_entry_t **out)
+int db_lookup_file_by_md5(JIGDB *dbp, unsigned char *md5, db_file_entry_t *out)
 {
     int error = 0;
     db_state_t *state = dbp;
     char *open_error;
     int result_type = RES_FILE;
+    char sql_command[2 * PATH_MAX];
 
     free_results();
 
@@ -576,7 +585,7 @@ int db_lookup_file_by_md5(JIGDB *dbp, char *md5, db_file_entry_t **out)
     res_current = res_head;
     if (res_current)
     {
-        *out = &res_current->data.file;
+        memcpy(out, &res_current->data.file, sizeof(db_file_entry_t));
         res_current = res_current->next;
     }
     else
@@ -585,12 +594,13 @@ int db_lookup_file_by_md5(JIGDB *dbp, char *md5, db_file_entry_t **out)
     return error;
 }
 
-int db_lookup_file_by_name(JIGDB *dbp, char *filename, db_file_entry_t **out)
+int db_lookup_file_by_name(JIGDB *dbp, char *filename, db_file_entry_t *out)
 {
     int error = 0;
     db_state_t *state = dbp;
     char *open_error;
     int result_type = RES_FILE;
+    char sql_command[2 * PATH_MAX];
 
     free_results();
 
@@ -605,7 +615,7 @@ int db_lookup_file_by_name(JIGDB *dbp, char *filename, db_file_entry_t **out)
     res_current = res_head;
     if (res_current)
     {
-        *out = &res_current->data.file;
+        memcpy(out, &res_current->data.file, sizeof(db_file_entry_t));
         res_current = res_current->next;
     }
     else
@@ -614,11 +624,12 @@ int db_lookup_file_by_name(JIGDB *dbp, char *filename, db_file_entry_t **out)
     return error;
 }
 
-int db_delete_file_by_name(JIGDB *dbp, char *md5, enum filetype type, char *filename)
+int db_delete_file_by_name(JIGDB *dbp, unsigned char *md5, enum filetype type, char *filename)
 {
     int error = 0;
     db_state_t *state = dbp;
     char *open_error;
+    char sql_command[2 * PATH_MAX];
 
     sprintf(sql_command, "DELETE FROM files WHERE md5 == '%s' AND filetype == '%d' AND filename == '%s';", md5, type, filename);
     error = sqlite3_exec(state->db, sql_command, NULL, NULL, &open_error);
@@ -634,6 +645,7 @@ int db_delete_files_by_age(JIGDB *dbp, time_t date)
     int error = 0;
     db_state_t *state = dbp;
     char *open_error;
+    char sql_command[2 * PATH_MAX];
 
     sprintf(sql_command, "DELETE FROM files WHERE time_added < %ld", date);
     error = sqlite3_exec(state->db, sql_command, NULL, NULL, &open_error);
@@ -648,6 +660,14 @@ int db_store_compressed(JIGDB *dbp, db_compressed_entry_t *entry)
     int error = 0;
     db_state_t *state = dbp;
     char *open_error;
+    char sql_command[2 * PATH_MAX];
+
+#ifdef DEBUG
+    fprintf(stderr, "db_store_compressed: storing entry:\n");
+    fprintf(stderr, "   comp_offset %lld, uncomp_offset %lld\n", entry->comp_offset, entry->uncomp_offset);
+    fprintf(stderr, "   comp_size %lld, uncomp_size %lld\n", entry->comp_size, entry->uncomp_size);
+    fprintf(stderr, "   comp_type %d, template_id %s\n", entry->comp_type, entry->template_id);
+#endif
 
     sprintf(sql_command, "INSERT INTO compressed VALUES(%lld,%lld,%lld,%lld,%d,'%s');",
             entry->comp_offset, entry->uncomp_offset, entry->comp_size,
@@ -664,19 +684,20 @@ int db_store_compressed(JIGDB *dbp, db_compressed_entry_t *entry)
 }
 
 int db_lookup_compressed_by_offset(JIGDB *dbp, unsigned long uncomp_offset,
-                                   unsigned char *template_id, db_compressed_entry_t **out)
+                                   unsigned char *template_id, db_compressed_entry_t *out)
 {
     int error = 0;
     db_state_t *state = dbp;
     char *open_error;
     int result_type = RES_COMPRESSED;
+    char sql_command[2 * PATH_MAX];
 
     free_results();
 
     sprintf(sql_command,
             "SELECT * FROM compressed WHERE template_id == '%s' "
             "AND uncomp_offset <= %ld "
-            "AND (uncomp_offset + size) > %ld;", template_id, uncomp_offset, uncomp_offset);
+            "AND (uncomp_offset + uncomp_size) > %ld;", template_id, uncomp_offset, uncomp_offset);
     error = sqlite3_exec(state->db, sql_command, results_callback, &result_type, &open_error);
     if (error)
     {
@@ -687,7 +708,7 @@ int db_lookup_compressed_by_offset(JIGDB *dbp, unsigned long uncomp_offset,
     res_current = res_head;
     if (res_current)
     {
-        *out = &res_current->data.compressed;
+        memcpy(out, &res_current->data.compressed, sizeof(db_compressed_entry_t));
         res_current = res_current->next;
     }
     else
