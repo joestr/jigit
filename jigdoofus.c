@@ -41,8 +41,11 @@ static int jdfs_is_template(const char *path)
 static int jdfs_getattr(const char *path, struct stat *stbuf)
 {
     int res;
+    char localpath[PATH_MAX];
+    if (snprintf(localpath, PATH_MAX, "%s/%s", G_base_dir, path) == PATH_MAX)
+        return -ENAMETOOLONG;
 
-    res = lstat(path, stbuf);
+    res = lstat(localpath, stbuf);
     if(res == -1)
         return -errno;
 
@@ -52,8 +55,10 @@ static int jdfs_getattr(const char *path, struct stat *stbuf)
 static int jdfs_readlink(const char *path, char *buf, size_t size)
 {
     int res;
-
-    res = readlink(path, buf, size - 1);
+    char localpath[PATH_MAX];
+    if (snprintf(localpath, PATH_MAX, "%s/%s", G_base_dir, path) == PATH_MAX)
+        return -ENAMETOOLONG;
+    res = readlink(localpath, buf, size - 1);
     if(res == -1)
         return -errno;
 
@@ -66,8 +71,11 @@ static int jdfs_getdir(const char *path, fuse_dirh_t h, fuse_dirfil_t filler)
     DIR *dp;
     struct dirent *de;
     int res = 0;
+    char localpath[PATH_MAX];
+    if (snprintf(localpath, PATH_MAX, "%s/%s", G_base_dir, path) == PATH_MAX)
+        return -ENAMETOOLONG;
 
-    dp = opendir(path);
+    dp = opendir(localpath);
     if(dp == NULL)
         return -errno;
 
@@ -150,8 +158,11 @@ static int jdfs_utime(const char *path, struct utimbuf *buf)
 static int jdfs_open(const char *path, int flags)
 {
     int res;
+    char localpath[PATH_MAX];
+    if (snprintf(localpath, PATH_MAX, "%s/%s", G_base_dir, path) == PATH_MAX)
+        return -ENAMETOOLONG;
 
-    res = open(path, flags);
+    res = open(localpath, flags);
     if(res == -1)
         return -errno;
 
@@ -164,8 +175,11 @@ static int jdfs_read(const char *path, char *buf, size_t size, off_t offset)
     int fd;
     int res;
     off_t seek_offset = 0;
+    char localpath[PATH_MAX];
+    if (snprintf(localpath, PATH_MAX, "%s/%s", G_base_dir, path) == PATH_MAX)
+        return -ENAMETOOLONG;
 
-    fd = open(path, O_RDONLY);
+    fd = open(localpath, O_RDONLY);
     if(fd == -1)
         return -errno;
 
@@ -189,10 +203,18 @@ static int jdfs_write(const char *path, const char *buf, size_t size, off_t offs
 static int jdfs_statfs(const char *path, struct statfs *stbuf)
 {
     int res;
+    char localpath[PATH_MAX];
+    if (snprintf(localpath, PATH_MAX, "%s/%s", G_base_dir, path) == PATH_MAX)
+        return -ENAMETOOLONG;
 
-    res = statfs(path, stbuf);
+    res = statfs(localpath, stbuf);
     if(res == -1)
         return -errno;
+
+    /* Don't show anything as free */
+    stbuf->f_bfree = 0;
+    stbuf->f_bavail = 0;
+    stbuf->f_ffree = 0;
 
     return 0;
 }
