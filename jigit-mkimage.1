@@ -59,6 +59,12 @@ every file and data block that is appended to the image.
 mkimage will normally write to stderr when it reports
 progress. Specify a logfile (or /dev/null) if you want it elsewhere.
 .TP
+\fB\-O\fR
+Skip checking the validity of specified jigdo files. mkimage will
+normally check for the "JigsawDownload" header as a sanity check, but
+some very old jigdo files produced by Debian pre-dated the addition of
+this header.
+.TP
 \fB\-o outfile\fR
 mkimage will normally write the ISO image to stdout, ready for piping
 into cdrecord or to iso-image.pl. Specify an output filename if you

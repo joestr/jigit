@@ -35,6 +35,7 @@ long long start_offset = 0;
 long long end_offset = 0;
 int quick = 0;
 int verbose = 0;
+int check_jigdo_header = 1;
 UINT64 out_size = 0;
 char *missing_filename = NULL;
 
@@ -114,7 +115,7 @@ static void display_progress(FILE *file, char *text)
     INT64 written = ftello(file);
     if (out_size > 0)
         fprintf(logfile, "\r %5.2f%%  %-60.60s",
-               100.0 * written / out_size, text);
+                100.0 * written / out_size, text);
 }
 
 static int add_match_entry(char *match)
@@ -146,7 +147,8 @@ static int add_match_entry(char *match)
     if (!entry)
         return ENOMEM;
 
-    fprintf(logfile, "Adding match entry %s:%s\n", match, mirror_path);
+    if (verbose)
+        fprintf(logfile, "Adding match entry %s:%s\n", match, mirror_path);
 
     entry->match = match;
     entry->mirror_path = mirror_path;
@@ -187,6 +189,10 @@ static md5_list_t *find_file_in_md5_list(unsigned char *base64_md5, int need_siz
     
     while (md5_list_entry)
     {        
+        if (verbose > 2)
+            fprintf(logfile, "find_file_in_md5_list: looking for %s, looking at %s (%s)\n", 
+                    base64_md5, md5_list_entry->md5, md5_list_entry->full_path);
+        
         if (!memcmp(md5_list_entry->md5, base64_md5, 16)) {
             if (need_size &&
                 md5_list_entry->file_size == UNKNOWN)
@@ -343,16 +349,16 @@ static int add_file_entry(char *jigdo_entry)
     error = find_file_in_mirror(match, jigdo_name, match, &file_size, &file_name);
 
     if (error)
-	{
-		if (missing_filename)
-			add_md5_entry(MISSING, base64_md5, file_name);
-		else
-		{
-			fprintf(logfile, "Unable to find a file to match %s\n", file_name);
-			fprintf(logfile, "Abort!\n");
-			exit (ENOENT);
-		}
-	}
+    {
+        if (missing_filename)
+            add_md5_entry(MISSING, base64_md5, file_name);
+        else
+        {
+            fprintf(logfile, "Unable to find a file to match %s\n", file_name);
+            fprintf(logfile, "Abort!\n");
+            exit (ENOENT);
+        }
+    }
     else
         add_md5_entry(file_size, base64_md5, file_name);
     return 0;
@@ -364,6 +370,7 @@ static int parse_jigdo_file(char *filename)
     gzFile *file = NULL;
     char *ret = NULL;
     int error = 0;
+    int num_files = 0;
     
     file = gzopen(filename, "rb");
     if (!file)
@@ -372,6 +379,24 @@ static int parse_jigdo_file(char *filename)
         return errno;
     }
 
+    /* Validate that we have a jigdo file */
+    if (check_jigdo_header)
+    {
+        ret = gzgets(file, buf, sizeof(buf));
+        if (NULL == ret)
+        {
+            gzclose(file);
+            fprintf(logfile, "Unable to read from jigdo file %s\n", filename);
+            return EIO;
+        }
+        if (strncmp(buf, "# JigsawDownload", 16))
+        {
+            gzclose(file);
+            fprintf(logfile, "Not a valid jigdo file: %s\n", filename);
+            return EINVAL;
+        }
+    }
+    
     /* Find the [Parts] section of the jigdo file */
     while (1)
     {
@@ -391,10 +416,13 @@ static int parse_jigdo_file(char *filename)
         if (!strcmp(buf, "[") || !strcmp(buf, "#"))
             continue;
         error = add_file_entry(strdup(buf));
+        num_files++;
         if (error)
             break;
     }
-
+    if (verbose)
+        fprintf(logfile, "Found entries for %d files in jigdo file %s\n", num_files, filename);
+    
     gzclose(file);
     return error;
 }
@@ -559,7 +587,7 @@ static int read_data_block(FILE *template_file)
             break;
         case COMP_BZIP2:
             error = unbzip2_data_block(comp_buf, compressed_len,
-                                      zip_state.data_buf, uncompressed_len);
+                                       zip_state.data_buf, uncompressed_len);
             break;
     }
 
@@ -644,8 +672,8 @@ static int parse_data_block(INT64 data_size, FILE *template_file,
 
         if (!quick)
             mk_MD5Update(context,
-						 (unsigned char *)&zip_state.data_buf[zip_state.offset_in_curr_buf],
-						 size);
+                         (unsigned char *)&zip_state.data_buf[zip_state.offset_in_curr_buf],
+                         size);
         zip_state.offset_in_curr_buf += size;
         remaining -= size;
         
@@ -680,6 +708,9 @@ static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size,
     md5_list_entry = find_file_in_md5_list((unsigned char *)base64_md5, 1);
     if (md5_list_entry && file_size == md5_list_entry->file_size)
     {
+        if (verbose > 1)
+            fprintf(logfile, "Reading %s\n", md5_list_entry->full_path);
+        
         input_file = fopen(md5_list_entry->full_path, "rb");
         if (!input_file)
         {
@@ -753,6 +784,8 @@ static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size,
         return 0;
     }
     /* else */
+    if (verbose)
+        fprintf(logfile, "Unable to find a file for block with md5 %s\n", base64_md5);
     return ENOENT;
 }
 
@@ -845,7 +878,7 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
         mk_MD5Init(&template_context);
     template_offset = desc_start + 10;
 
-    if (1 == verbose)
+    if (verbose)
         fprintf(logfile, "Creating ISO image %s\n", output_name);
 
     /* Main loop - walk through the template file and expand each entry we find */
@@ -963,14 +996,15 @@ static void usage(char *progname)
     printf("%s [OPTIONS]\n\n", progname);
     printf(" Options:\n");
     printf(" -f <MD5 name>       Specify an input MD5 file. MD5s must be in jigdo's\n");
-	printf("                     pseudo-base64 format\n");
+    printf("                     pseudo-base64 format\n");
     printf(" -j <jigdo name>     Specify the input jigdo file\n");
     printf(" -t <template name>  Specify the input template file\n");
     printf(" -m <item=path>      Map <item> to <path> to find the files in the mirror\n");
-	printf(" -M <missing name>   Rather than try to build the image, just check that\n");
-	printf("                     all the needed files are available. If any are missing,\n");
-	printf("                     list them in this file.\n");
-	printf(" -v                  Make the output logging more verbose\n");
+    printf(" -M <missing name>   Rather than try to build the image, just check that\n");
+    printf("                     all the needed files are available. If any are missing,\n");
+    printf("                     list them in this file.\n");
+    printf(" -v                  Make the output logging more verbose; may be added\n");
+    printf("                     multiple times\n");
     printf(" -l <logfile>        Specify a logfile to append to.\n");
     printf("                     If not specified, will log to stderr\n");
     printf(" -o <outfile>        Specify a file to write the ISO image to.\n");
@@ -980,6 +1014,8 @@ static void usage(char *progname)
     printf(" -e <bytenum>        End byte number; will end at EOF if not specified\n");    
     printf(" -z                  Don't attempt to rebuild the image; simply print its\n");
     printf("                     size in bytes\n");
+    printf(" -O                  Support Old-format .jigdo files without the JigsawDownload\n");
+    printf("                     header\n");
 }
 
 int main(int argc, char **argv)
@@ -999,7 +1035,7 @@ int main(int argc, char **argv)
 
     while(1)
     {
-        c = getopt(argc, argv, ":ql:o:j:t:f:m:M:h?s:e:zv");
+        c = getopt(argc, argv, ":ql:o:j:t:f:m:M:h?s:e:zvO");
         if (-1 == c)
             break;
         
@@ -1025,7 +1061,7 @@ int main(int argc, char **argv)
                 outfile = fopen(output_name, "wb");
                 if (!outfile)
                 {
-                    fprintf(stderr, "Unable to open output file %s\n", optarg);
+                    fprintf(logfile, "Unable to open output file %s\n", optarg);
                     return errno;
                 }
                 break;
@@ -1071,8 +1107,8 @@ int main(int argc, char **argv)
             case 'h':
             case '?':
                 usage(argv[0]);
-                return 0;
-                break;
+            return 0;
+            break;
             case 's':
                 start_offset = strtoull(optarg, NULL, 10);
                 if (start_offset != 0)
@@ -1085,6 +1121,9 @@ int main(int argc, char **argv)
                 break;
             case 'z':
                 sizeonly = 1;
+                break;
+            case 'O':
+                check_jigdo_header = 0;
                 break;
             default:
                 fprintf(logfile, "Unknown option!\n");
