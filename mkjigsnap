@@ -6,7 +6,9 @@
 #
 # Server-side wrapper; run this on a machine with a mirror to set up
 # the snapshots for jigit
-
+#
+# GPL v2 - see COPYING 
+#
 # Some things needed:
 #   CD name of the jigit
 #   location of the mirror

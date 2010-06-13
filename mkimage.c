@@ -1,3 +1,13 @@
+/*
+ * mkimage
+ *
+ * Tool to create an ISO image from jigdo files
+ *
+ * Copyright (c) 2004 Steve McIntyre <steve@einval.com>
+ *
+ * GPL v2 - see COPYING
+ */
+
 #undef BZ2_SUPPORT
 
 #include <errno.h>

@@ -1,3 +1,13 @@
+/*
+ * endian.c
+ *
+ * Simple helper functions for reading and writing BE and LE numbers
+ *
+ * Copyright (c) 2004 Steve McIntyre <steve@einval.com>
+ *
+ * GPL v2 - see COPYING
+ */
+
 #include "endian.h"
 
 /* Write a 64-bit quantity out into memory in BIG ENDIAN order */

@@ -1,3 +1,13 @@
+/*
+ * endian.h
+ *
+ * Simple helper functions for reading and writing BE and LE numbers
+ *
+ * Copyright (c) 2004 Steve McIntyre <steve@einval.com>
+ *
+ * GPL v2 - see COPYING
+ */
+
 void                  write_be64  (unsigned long long in, unsigned char *out);
 unsigned long long    read_be64   (unsigned char *in);
 void                  write_le64  (unsigned long long in, unsigned char *out);

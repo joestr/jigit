@@ -1,3 +1,14 @@
+/*
+ * jigsum
+ *
+ * Tool to calculate and print MD5 checksums in jigdo's awkward
+ * base64-ish encoding.
+ *
+ * Copyright (c) 2004 Steve McIntyre <steve@einval.com>
+ *
+ * GPL v2 - see COPYING
+ */
+
 #include <stdio.h>
 #include <errno.h>
 #include <stdlib.h>
