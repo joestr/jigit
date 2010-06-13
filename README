@@ -40,20 +40,20 @@ will generate an ISO image that exactly matches the original.
 
 Current versions of JTE now also come with some extra tools:
 
-mkimage, a simple and very fast tool to reconstruct image files from
-.jigdo and .template files. It doesn't have any logic to cope with
-downloading missing files, but will list the missing files that are
-needed. It is also much faster for people (like me!) who already have
-full local mirrors.
+jigit-mkimage, a simple and very fast tool to reconstruct image files
+from .jigdo and .template files. It doesn't have any logic to cope
+with downloading missing files, but will list the missing files that
+are needed. It is also much faster for people (like me!) who already
+have full local mirrors.
 
-iso-image.pl is a CGI script to wrap around mkimage if you'd like to
-be able to offer images for HTTP download without using up multiple
-gigabytes of disk space. And for added network efficiency the perl CGI
-also supports HTTP v1.1 byte ranges so clients can resume aborted
-downloads.
+iso-image.pl is a CGI script to wrap around jigit-mkimage if you'd
+like to be able to offer images for HTTP download without using up
+multiple gigabytes of disk space. And for added network efficiency the
+perl CGI also supports HTTP v1.1 byte ranges so clients can resume
+aborted downloads.
 
-jigit is a first attempt at a user-friendly wrapper for mkimage on a
-user's machine.
+jigit is a first attempt at a user-friendly wrapper for jigit-mkimage
+on a user's machine.
 
 The addition of these extra tools means that I'm now distributing JTE
 as a tarball rather than just a genisoimage patch; the patch is inside the
@@ -176,10 +176,10 @@ maximum benefit from the dentry and page cache.
 
 ----------------------------------------------------------------------
 
-How to use mkimage
+How to use jigit-mkimage
 
-mkimage is a faster, local-only version of "jigdo-file make-image", again
-written in portable C. It takes a few options:
+jigit-mkimage is a faster, local-only version of "jigdo-file
+make-image", again written in portable C. It takes a few options:
 
 +-----------------------------------------------------------------------------+
 |-f <MD5  |Specify a file containing MD5sums for files we should attempt to   |
@@ -227,24 +227,25 @@ if the full image is not generated!
 
 How to use iso-image.pl
 
-iso-image.pl is a small perl wrapper script written to drive mkimage and turn
-it into a CGI. It will parse the incoming request (including byte-ranges) and
-call mkimage to actually generate the image pieces wanted.
+iso-image.pl is a small perl wrapper script written to drive
+jigit-mkimage and turn it into a CGI. It will parse the incoming
+request (including byte-ranges) and call jigit-mkimage to actually
+generate the image pieces wanted.
 
 Configuration is simple: place iso-image.pl in a cgi-bin directory and set
 various paths in the script:
 
-  * The path to mkimage
+  * The path to jigit-mkimage
   * A log file location
   * The path to the template and jigdo files
-  * Other options to mkimage (e.g. -q and match locations)
+  * Other options to jigit-mkimage (e.g. -q and match locations)
 
 ----------------------------------------------------------------------
 
 How to use jigit
 
-Jigit is a small, user-friendly wrapper around mkimage to make life
-easier for end users to download or upgrade existing CDs and CD
+Jigit is a small, user-friendly wrapper around jigit-mkimage to make
+life easier for end users to download or upgrade existing CDs and CD
 images. Configure it by editing /etc/jigit.conf or ~/.jigit.conf, then
 run jigit with just one command line option, the name of the
 distribution CD. Answer the questions it asks and it will do the rest.
@@ -263,4 +264,4 @@ What's left to do?
  1. Testing! :-) This is where you lot come in! Please play with this some more
     and let me know if you have any problems, especially with data corruption.
  2. More documentation.
- 3. Support for non-local mirrors in mkimage.
+ 3. Support for non-local mirrors in jigit-mkimage.
