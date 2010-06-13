@@ -2,7 +2,7 @@
 #
 # jigit
 #
-# (c) 2004 Steve McIntyre
+# (c) 2004-2007 Steve McIntyre
 #
 # Wrapper for jigdo to make updating CDs easier
 #
@@ -10,7 +10,7 @@
 
 # Some definitions
 APT_CACHE=/var/cache/apt/archives
-WGET_OPTS="-q --passive-ftp --no-directories --non-verbose"
+WGET_OPTS="-q --passive-ftp --no-directories --no-verbose"
 HOST="http://people.debian.org/~93sam/"
 
 if [ -e /etc/jigit.conf ] ; then
