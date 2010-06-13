@@ -67,7 +67,7 @@ static int md5_file(char *filename)
         used = fread(buf, 1, BUF_SIZE, file);
         bytes_read += used;
         if (used)
-            mk_MD5Update(&file_context, buf, used);
+            mk_MD5Update(&file_context, (unsigned char *)buf, used);
         else
         {
             if (ferror(file) && (EISDIR != errno))
