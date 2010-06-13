@@ -1,0 +1,108 @@
+Version 1.16 (2007/10/18)
+
+ * Remove build-stamp from the release tarball, to make debian package
+   builds work better
+ * Fix wget options typo
+ * Add proper working bzip2-compressed template support in jigdump and
+   mkimage
+ * In mkimage, don't stat every file mentioned in the md5 list until we
+   need to.
+ * Other small cleanups in jigdump and mkimage
+
+Version 1.15 (2005/01/17)
+
+ * Minor compilation fixes
+ * Cope with missing files better
+ * Minor jigdo file-handling cleanups
+ * mkimage code refactored to make it easier to maintain
+ * Cleaned up licensing - added explicit GPL v2 headers all over
+ * Fix image reconstruction with jigit
+
+Version 1.14 (2004/10/12)
+
+ * Fixed generation of rsyncsums
+ * Added -d option to mkjigsnap to specify DIRNAME
+ * Minor prettiness tweaks to output UI of mkimage and jigit
+ * 64-bit printf fixes
+
+Version 1.13 (2004/09/05)
+
+ * Improved the documentation, listing new options to mkimage
+ * Fixed/updated the debian-cd patch
+
+Version 1.12 (2004/09/05)
+
+ * Improved the documentation, listing new options to mkimage
+ * Fixed/updated the debian-cd patch
+
+Version 1.11 (2004/09/05)
+
+ * Added rsync sums into JTE output
+ * Added jigit script
+ * Added extra options to mkimage to support jigit
+
+Version 1.10 (2004/09/01)
+
+ * Removed the last md5 check; no longer needed
+ * Added new -jigdo-force-md5 option; any files matching specified
+   paths MUST match an MD5 supplied, or fail
+ * Fixed a couple of typos.                          
+ * Added initial work for bz2 support.               
+ * debian-cd diff now includes updated grab_md5 and jigdo_cleanup
+   scripts that must be used.
+ * mkisofs now leaves a blank [Servers] section in the .jigdo file -
+   jigdo_cleanup does the work.
+
+Version 1.9 (2004/08/30)
+
+ * Added MD5 reverse lookups to pick up boot files; helps reduce
+   CD/DVD #1 size substantially, BUT -md5-list option now mandatory.                   
+ * Fixed sizing bug in HFS hybrid template code.
+
+Version 1.8 (2004/08/27)
+
+ * Tweaked the -exclude option to reduce template file sizes                                        
+
+Version 1.7 (2004/08/19)
+
+ * Fixed a couple of silly bugs introduced; don't assume template
+   creation.
+ * Added README files and man page sections for the new boot
+   support.
+	
+Version 1.6 (2004/07/14)
+
+ * Added code to check MD5 sums in mkisofs; should no longer need
+   to run mirror_check any more. See the -md5-list option.
+
+Version 1.5 (2004/07/05)
+
+ * Minor bug-fixes and updates to mkimage
+ * Added iso-image.pl wrapper script
+
+Version 1.4 (2004/06/26)
+
+ * Added mkimage
+ * Moved utils and patch into a tarball
+
+Version 1.3 (2004/06/18)
+
+ * Fixed crash without jigdo options
+ * Cleaned up mipsel boot code
+ * Make it easier to specify the boot command line for hppa
+ * Minor cosmetic .jigdo cleanup
+
+Version 1.2 (2004/06/14)
+
+ * Added boot support for alpha, hppa, mips, mipsel
+ * Cosmetic changes to the .jigdo file               
+
+Version 1.1 (2004/06/10)
+
+ * Removed .jte file code
+ * Large cleanup to reduce patch size
+
+Version 1.0 (2004/06/07)
+
+ * Initial release
+ * Produced .jigdo, .template and .jte files
