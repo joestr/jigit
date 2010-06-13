@@ -1,11 +1,11 @@
 BINS = jigdump mkimage jigsum rsyncsum
 CFLAGS = -g -Wall -Werror -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE
-CC = gcc
+#CC = gcc
 
 all: $(BINS)
 
 mkimage: mkimage.o endian.o md5.o
-	$(CC) -o $@ $+ -lz # -lbz2
+	$(CC) -o $@ $+ -lz -lbz2
 
 jigsum: jigsum.o md5.o
 	$(CC) -o $@ $+
@@ -17,6 +17,6 @@ jigdump: jigdump.o md5.o
 	$(CC) -o $@ $+
 
 clean:
-	rm -f *.o $(BINS) *~
+	rm -f *.o $(BINS) *~ build-stamp
 
 distclean: clean
