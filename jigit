@@ -87,7 +87,7 @@ echo
 rm -f $TMPDIR/jigit/jigdo/missing-list
 
 # Check if we have all the pieces we need
-mkimage -f $TMPDIR/jigit/files/md5-list \
+jigit-mkimage -f $TMPDIR/jigit/files/md5-list \
     -t $TMPDIR/jigit/jigdo/$TEMPLATE \
     -j $TMPDIR/jigit/jigdo/$JIGDO \
     -M $TMPDIR/jigit/jigdo/missing-list
@@ -118,7 +118,7 @@ if [ -e $TMPDIR/jigit/jigdo/missing-list ] ; then
 
     rm -f $TMPDIR/jigit/jigdo/missing-list
 	# Check (again) if we have all the pieces we need
-    mkimage -f $TMPDIR/jigit/files/md5-list \
+    jigit-mkimage -f $TMPDIR/jigit/files/md5-list \
         -t $TMPDIR/jigit/jigdo/$TEMPLATE \
         -j $TMPDIR/jigit/jigdo/$JIGDO \
         -M $TMPDIR/jigit/jigdo/missing-list
@@ -134,7 +134,7 @@ printf "\r%5d files missing; all needed files available                       " 
 echo
 echo
 # We should have all the bits; build the image
-mkimage -v -f $TMPDIR/jigit/files/md5-list \
+jigit-mkimage -v -f $TMPDIR/jigit/files/md5-list \
     -t $TMPDIR/jigit/jigdo/$TEMPLATE \
     -j $TMPDIR/jigit/jigdo/$JIGDO \
     -o $TMPDIR/jigit/jigdo/$CDNAME.iso \

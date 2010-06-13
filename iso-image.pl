@@ -18,7 +18,7 @@ use File::Basename;
 use Socket;
 
 # Configure these for your system
-my $mkimage = "/usr/local/bin/mkimage";
+my $mkimage = "/usr/local/bin/jigit-mkimage";
 my $logfile = "/var/log/jigdo-logs/log.$$";
 my $template_dir = "/mirror/jigdo";
 my $matches = "-q -m Debian=/mirror/debian -m Non-US=/mirror/debian-non-US";
