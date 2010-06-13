@@ -1,7 +1,7 @@
-README for JTE 1.15
+README for JTE 1.16
 
 Steve McIntyre <steve@einval.com>
-17 Jan 2005
+17 Oct 2007
 
 License - GPL v2. See the file COPYING for more details.
 
@@ -30,11 +30,11 @@ There are a few ways to improve this that I can see:
  2. Write a helper tool to dump extra information for jigdo to use alongside
     the ISO image (helper tool written, but modifying jigdo to use this looks
     HARD)
- 3. Patch mkisofs to write .jigdo and .template files alongside the ISO image
+ 3. Patch genisoimage to write .jigdo and .template files alongside the ISO image
 
 I've now done the third of these, and called it JTE (or Jigdo Template Export).
 The code works fine, and runs in a very small fraction of the time taken to run
-mkisofs and jigdo separately. The output .jigdo and .template files work
+genisoimage and jigdo separately. The output .jigdo and .template files work
 correctly, i.e. jigdo-file and the wrapper script jigdo-mirror accept them and
 will generate an ISO image that exactly matches the original.
 
@@ -56,7 +56,7 @@ jigit is a first attempt at a user-friendly wrapper for mkimage on a
 user's machine.
 
 The addition of these extra tools means that I'm now distributing JTE
-as a tarball rather than just a mkisofs patch; the patch is inside the
+as a tarball rather than just a genisoimage patch; the patch is inside the
 tarball too.
 
 ----------------------------------------------------------------------
@@ -72,37 +72,37 @@ in the same way. And paths in the original filesystem can be mapped
 onto more global namespaces using the [Servers] section in the .jigdo
 file. For example:
 
-mkisofs -J -r -o /home/steve/test1.iso \
-        -jigdo-jigdo /home/steve/test1.jigdo \
-        -jigdo-template /home/steve/test1.template \
-        -jigdo-min-file-size 16384 \
-        -jigdo-ignore "README*" \
-		-jigdo-force-md5 /pool/ \
-        -jigdo-map Debian=/mirror/debian \
-        -md5-list /home/steve/md5.list \
-        /mirror/jigdo-test
+genisoimage -J -r -o /home/steve/test1.iso \
+            -jigdo-jigdo /home/steve/test1.jigdo \
+            -jigdo-template /home/steve/test1.template \
+            -jigdo-min-file-size 16384 \
+            -jigdo-ignore "README*" \
+		    -jigdo-force-md5 /pool/ \
+            -jigdo-map Debian=/mirror/debian \
+            -md5-list /home/steve/md5.list \
+            /mirror/jigdo-test
 
-If the -jigdo-* options are not used, the normal mkisofs execution
+If the -jigdo-* options are not used, the normal genisoimage execution
 path is not affected at all. The above invocation will create 3 output
 files (.iso, .jigdo and .template). Multiple -jigdo-ignore and
 -jigdo-map options are accepted, for multiple ignore and map patterns.
 
 Use the -md5-list option to specify the location of a list of files
-and their md5sums in normal md5sum format. mkisofs will then compare
+and their md5sums in normal md5sum format. genisoimage will then compare
 the checksum of each file it is asked to write against the checksum of
 that file in the list. It will abort on any mismatches. The MD5 list
 file must list all the files that are expected to be found and listed
 in the output .jigdo file. The -jigdo-force-md5 option specifies a
 path where all files are expected to have an MD5 entry
 (e.g. /pool/). Then if any files do not have a match, they must have
-been corrupted and mkisofs will abort.
+been corrupted and genisoimage will abort.
 
 More options have now been added in version 1.2 so that you can
 specify the location of boot files within the ISO image. Previously
 the four architectures alpha, hppa, mips and mipsel needed separate
 tools to make an ISO image bootable. This also made life very hard
 when trying to produce jigdo files.  Instead, I've folded boot support
-for those architectures into this patch so that mkisofs will do all
+for those architectures into this patch so that genisoimage will do all
 the work:
 
 +-----------------------------------------------------------------------------+
@@ -145,7 +145,7 @@ the work:
 
 How it works
 
-I've hooked all the places in mkisofs where it will normally write image data.
+I've hooked all the places in genisoimage where it will normally write image data.
 All the normal data write calls (directory entries etc.) I simply pass through
 and build into the template file. Any file data entries are passed through with
 information about the original file. If that file is large enough, I grab the
@@ -167,7 +167,7 @@ can produce a 7GB DVD iso image with the jigdo and template files in about 8
 minutes. A debian-cd run from start to finish to create DVD images takes about
 25 minutes per architecture.
 
-Mkisofs is normally I/O-bound on this system, but when running the jigdo
+Genisoimage is normally I/O-bound on this system, but when running the jigdo
 creation code it's now CPU bound - it's now running 2 MD5 checksums on each
 data block that it sees. To boost performance when creating images, running 2
 copies of debian-cd in parallel on a single system should parallelise nicely -
@@ -202,7 +202,7 @@ written in portable C. It takes a few options:
 |-v       |Make the output logging more verbose.                              |
 |---------+-------------------------------------------------------------------|
 |-l <log  |Specify a logfile. If not specified, will log to stderr just like  |
-|file>    |mkisofs                                                            |
+|file>    |genisoimage                                                        |
 |---------+-------------------------------------------------------------------|
 |         |Don't bother checking md5sums of the input files, or of the output |
 |-q       |image.                                                             |
@@ -251,10 +251,10 @@ distribution CD. Answer the questions it asks and it will do the rest.
 
 ----------------------------------------------------------------------
 
-Debian-cd integration
+External integration
 
-Checkout current CVS head of debian-cd and apply the patch in
-JTE-patch1.gz.
+The current released version of debian-cd in etch supports JTE out of
+the box. Wodim ships with integrated JTE code too.
 
 ----------------------------------------------------------------------
 
@@ -263,12 +263,4 @@ What's left to do?
  1. Testing! :-) This is where you lot come in! Please play with this some more
     and let me know if you have any problems, especially with data corruption.
  2. More documentation.
- 3. Push patches upstream. This may take a while...
- 4. Bzip2 support - I've added this experimentally, but it's disabled
-    until jigdo itself gets it.
-
-I hope people find this useful - at the moment I shudder at the thought of
-releasing sarge (10+ CDs, netinst, business card, 2 DVDs per arch) without
-making this kind of change. It'll take a week to generate the release images
-otherwise...
-
+ 3. Support for non-local mirrors in mkimage.
