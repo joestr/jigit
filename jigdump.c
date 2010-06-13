@@ -20,24 +20,9 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include "md5.h"
+#include "jigdo.h"
 
-typedef unsigned long long UINT64;
-typedef long long INT64;
-typedef unsigned long      UINT32;
-
-#define BUF_SIZE 65536
-
-typedef enum state_
-{
-    STARTING,
-    IN_DATA,
-    IN_DESC,
-    DUMP_DESC,
-    DONE,
-    ERROR
-} e_state;
-
-INT64 find_string(unsigned char *buf, size_t buf_size, char *search)
+static INT64 find_string(unsigned char *buf, size_t buf_size, char *search)
 {
     size_t length = strlen(search);
     INT64 result;
@@ -50,13 +35,17 @@ INT64 find_string(unsigned char *buf, size_t buf_size, char *search)
     return -1;
 }
 
-INT64 parse_data_block(INT64 offset, unsigned char *buf, size_t buf_size)
+static INT64 parse_data_block(INT64 offset, unsigned char *buf, size_t buf_size)
 {
     /* Parse the contents of this data block... */
     UINT64 dataLen = 0;
     UINT64 dataUnc = 0;
-    
-    printf("\nDATA block found at offset %lld\n", offset);
+
+    if (!strncmp((char *)buf, "DATA", 4))
+        printf("\ngzip data block found at offset %lld\n", offset);
+    else
+        printf("\nbzip2 data block found at offset %lld\n", offset);
+
     dataLen = (UINT64)buf[4];
     dataLen |= (UINT64)buf[5] << 8;
     dataLen |= (UINT64)buf[6] << 16;
@@ -76,7 +65,7 @@ INT64 parse_data_block(INT64 offset, unsigned char *buf, size_t buf_size)
     return dataLen;
 }
 
-INT64 parse_desc_block(INT64 offset, unsigned char *buf, size_t buf_size)
+static INT64 parse_desc_block(INT64 offset, unsigned char *buf, size_t buf_size)
 {
     /* Parse the contents of this data block... */
     UINT64 descLen = 0;
@@ -93,14 +82,14 @@ INT64 parse_desc_block(INT64 offset, unsigned char *buf, size_t buf_size)
     return 10;
 }
 
-INT64 parse_desc_data(INT64 offset, unsigned char *buf, size_t buf_size)
+static INT64 parse_desc_data(INT64 offset, unsigned char *buf, size_t buf_size)
 {
     int type = buf[0];
     printf("  DESC entry: block type %d\n", type);
     
     switch (type)
     {
-        case 2:
+        case BLOCK_DATA:
         {
             UINT64 skipLen = 0;
             skipLen = (UINT64)buf[1];
@@ -112,7 +101,7 @@ INT64 parse_desc_data(INT64 offset, unsigned char *buf, size_t buf_size)
             printf("    Unmatched data, %llu bytes\n", skipLen);
             return 7;
         }
-        case 5:
+        case BLOCK_IMAGE:
         {
             UINT64 imglen = 0;
             UINT32 blocklen = 0;
@@ -138,7 +127,7 @@ INT64 parse_desc_data(INT64 offset, unsigned char *buf, size_t buf_size)
             printf("    Rsync block length %lu bytes\n", blocklen);
             return 0; /* i.e. we're finished! */
         }
-        case 6:
+        case BLOCK_MATCH:
         {
             UINT64 fileLen = 0;
             int i = 0;
@@ -211,6 +200,8 @@ int main(int argc, char **argv)
             break;
         }
         start_offset = find_string(buf, bytes, "DATA");
+        if (-1 == start_offset)
+            start_offset = find_string(buf, bytes, "BZIP");
         if (start_offset >= 0)
         {
             offset += start_offset;
@@ -232,7 +223,7 @@ int main(int argc, char **argv)
         }
         if (IN_DATA == state)
         {
-            if (!find_string(buf, bytes, "DATA"))
+            if (!find_string(buf, bytes, "DATA") || !find_string(buf, bytes, "BZIP"))
                 state = IN_DATA;
             if (!find_string(buf, bytes, "DESC"))
                 state = IN_DESC;
