@@ -257,17 +257,40 @@ static int add_md5_entry(INT64 size, char *md5, char *path)
     return 0;
 }
 
+static int hex_to_nibble(char hex)
+{
+    if (hex >= '0' && hex <= '9')
+        return hex - '0';
+    else if (hex >= 'A' && hex <= 'F')
+        return 10 + hex - 'A';
+    else if (hex >= 'a' && hex <= 'f')
+        return 10 + hex - 'a';
+    return 0;
+}
+
+/* Parse an incoming MD5 file entry, working in place in the
+ * (strduped) buffer we've been passed */
 static int parse_md5_entry(char *md5_entry)
 {
     int error = 0;
     char *file_name = NULL;
     char *md5 = NULL;
+    unsigned char bin_md5[16];
+    int i;
+
+    md5_entry[32] = 0;
+    md5_entry[33] = 0;
+
+    /* Re-encode hex as base64 and overwrite in place; safe, as the
+     * md5 will be shorter than the hex. */
+    for (i = 0; i < 16; i++)
+        bin_md5[i] = (hex_to_nibble(md5_entry[2 * i]) << 4) |
+                      hex_to_nibble(md5_entry[2 * i + 1]);
+    strncpy(md5_entry, base64_dump(bin_md5, 16), 22);
 
     md5_entry[22] = 0;
-    md5_entry[23] = 0;
-
     md5 = md5_entry;
-    file_name = &md5_entry[24];
+    file_name = &md5_entry[48];
 
     if ('\n' == file_name[strlen(file_name) -1])
         file_name[strlen(file_name) - 1] = 0;
