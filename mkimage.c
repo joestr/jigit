@@ -808,7 +808,15 @@ static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size,
     }
     /* else */
     if (verbose)
-        fprintf(logfile, "Unable to find a file for block with md5 %s\n", base64_md5);
+    {
+        char hex_md5[33];
+        int i;
+
+        for (i = 0; i < 16; i++)
+            sprintf(hex_md5 + 2 * i, "%2.2x", (unsigned int) md5[i]);
+
+        fprintf(logfile, "Unable to find a file for block with md5 %s (%s)\n", hex_md5, base64_md5);
+    }
     return ENOENT;
 }
 
