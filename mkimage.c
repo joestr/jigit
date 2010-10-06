@@ -193,7 +193,7 @@ static md5_list_t *find_file_in_md5_list(unsigned char *base64_md5, int need_siz
             fprintf(logfile, "find_file_in_md5_list: looking for %s, looking at %s (%s)\n", 
                     base64_md5, md5_list_entry->md5, md5_list_entry->full_path);
         
-        if (!memcmp(md5_list_entry->md5, base64_md5, 16)) {
+        if (!memcmp(md5_list_entry->md5, base64_md5, 22)) {
             if (need_size &&
                 md5_list_entry->file_size == UNKNOWN)
                 md5_list_entry->file_size =
