@@ -1,7 +1,7 @@
-README for JTE 1.16
+README for JTE 1.17
 
 Steve McIntyre <steve@einval.com>
-17 Oct 2007
+16 March 2011
 
 License - GPL v2. See the file COPYING for more details.
 
@@ -30,15 +30,26 @@ There are a few ways to improve this that I can see:
  2. Write a helper tool to dump extra information for jigdo to use alongside
     the ISO image (helper tool written, but modifying jigdo to use this looks
     HARD)
- 3. Patch genisoimage to write .jigdo and .template files alongside the ISO image
+ 3. Patch ISO creation tools to write .jigdo and .template files
+    alongside the ISO image
 
-I've now done the third of these, and called it JTE (or Jigdo Template Export).
-The code works fine, and runs in a very small fraction of the time taken to run
-genisoimage and jigdo separately. The output .jigdo and .template files work
-correctly, i.e. jigdo-file and the wrapper script jigdo-mirror accept them and
+I've now done the third of these, and called the code JTE (or Jigdo
+Template Export). The code works fine, and runs in a very small
+fraction of the time taken to run genisoimage and jigdo
+separately. The output .jigdo and .template files work correctly,
+i.e. jigdo-file and the wrapper script jigdo-mirror accept them and
 will generate an ISO image that exactly matches the original.
 
-Current versions of JTE now also come with some extra tools:
+However, cdrkit / genisoimage is now deprecated in my opinion. The
+nice people working on xorriso (George Danchev and Thomas Schmitt)
+have helped a huge amount by cleaning up some of my code and wrapping
+it properly in a shared library. The code is now included here as
+libjte, and re-licensed slightly as LGPL v2.1 or later.
+
+Tools
+=====
+
+JTE also comes with some extra tools:
 
 jigit-mkimage, a simple and very fast tool to reconstruct image files
 from .jigdo and .template files. It doesn't have any logic to cope
@@ -55,13 +66,9 @@ aborted downloads.
 jigit is a first attempt at a user-friendly wrapper for jigit-mkimage
 on a user's machine.
 
-The addition of these extra tools means that I'm now distributing JTE
-as a tarball rather than just a genisoimage patch; the patch is inside the
-tarball too.
-
 ----------------------------------------------------------------------
 
-How to use JTE
+How to use JTE in genisoimage
 
 To use the jigdo creation code, specify the location of the output
 .jigdo and .template files alongside the ISO image. You can also
