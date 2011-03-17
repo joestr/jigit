@@ -1,0 +1,112 @@
+libjte-0.1.1 (not released yet)
+===============================================================================
+* Thomas: porting libjte to Solaris 9: avoiding <stdint.h> if not available,
+  trying to use <inttypes.h> in that case.
+* jte.c: return from flush_compressed_chunk() if size<=0.
+* jte.c, libjte.c: drop redundant check against NULL upon free()'ing.
+* checksum.c, sha256.c, sha256.h, sha512.c, sha512.h:
+  Thomas: Removed obsolete include <endian.h> and __THROW;
+  Initialize sha512.c by pairs of 32 bit constants rather than by 64 bit.
+* checksum.c, endian.c, md5.c, rsync.c, sha1.c, sha256.c, sha512.c: 
+  include ../config.h eventually.
+* jte.c, libjte.c: Thomas: Eventually include ../config.h so that GNU xorriso 
+  can configure usage of zlib libbz2.
+* checksum.c, sha1.c, sha1.h: Steve: new sha1 implementation.
+* Makefile.am, checksum.c, configure.ac: Steve: use threaded checksums.
+* Makefile.am, configure.ac, jte.c: Thomas: Made source compilable without zlib. 
+  It is not of use then, but can reside as unused code in GNU xorriso.
+* jte.c: Thomas: avoid strndup as it is non standard.
+* configure.ac, jte.c, jte.h, libjte.c, libjte.h, test/demo.c: 
+  Thomas: Corrected handling of mapping strings To=From. Gave up parameters 
+  submode and islast of API functions libjte_write_unmatched() and 
+  libjte_show_data_chunk(). libjte version is now 0.1.1 producing libjte.so.2.
+* Makefile.am, test/demo.c: Thomas: updated demo doc - jigit-mkimage example.
+* jte.c: change producer code to libjte.
+* Makefile.am, test/demo.c: demo app by Thomas.
+* jte.c, jte.h, libjte.c, libjte.h, libjte_private.h, test/jigdo-gen-md5-list: 
+  added copyright blurb.
+* libjte.ver: Thomas: bugfix, add libjte__version and libjte__is_compatible 
+  symbols which were missing in libjte.ver.
+* libjte.h: Thomas: Clarified the meaning of parameters of 
+  libjte_set_error_behavior().
+* libjte.c: Thomas: bugfix, libjte_set_error_behavior() 
+  interpreted 0 the same as 1.
+* jte.c: update references to attarer.org; Rf: Debian bug #596860.
+* configure.ac: check for presence of important functions used.
+* configure.ac: checks for types, typedefs, structures (hopefully to beef up 
+  tree configuration on hostile, evil or purely insane systems).
+* configure.ac: populate AC_CHECK_HEADERS() with used system header files.
+* libjte.c, libjte.h: Thomas: API doc; properly handle mirror_name 
+  in libjte_decide_file_jigdo().
+* jte.c: check malloc return value.
+* jte.c: drop JTWRITE_DEBUG block.
+* jte.c: bz_stream declares a member char* next_out so we assign to it same 
+  type of data.
+* configure.ac, jte.c, libjte.c, libjte.h: Thomas: runtime version inquiry:
+  allows to check for sufficient library features at runtime.
+* checksum.c, libjte.c: Thomas: Switched MD5 from mandatory to unconditional checksum 
+  algorithm. Made use of CHECK_*_USED macros when composing checksum bit pattern in
+  parse_checksum_algo().
+* libjte.c: Thomas: Made use of checksum.c:parse_checksum_algo().
+* configure.ac: fix BZIP2 leftover.
+* libjte.h: include sys/types.h because of off_t.
+* libjte.c, libjte.h: avoid public stdint, use off_t instead; 
+  Related to the fact: C++ implementations should define
+  these macros only when __STDC_CONSTANT_MACROS is defined before
+  <stdint.h> is included.
+* jte.c, libjte.c: two memory leaks underneath libjte_destroy(). Thanks to valgrind.
+* checksum.c, endian.c, endianconv.h, jte.c, jte.h, md5.c, md5.h, rsync.c, rsync.h: 
+  replace 'unsigned long long' by uint64_t also as suggested by Thomas.
+* jte.c, libjte.c: Freeing checksum contexts for iso and template in libjte_destroy() 
+  Avoiding memory leaks in write_template_header() and write_jt_header(). 
+  All delivered by Thomas.
+* jte.c, jte.h, libjte.c: list destructors as sent by Thomas.
+* jte.c: Removed five unused variables.
+* checksum.c, jte.c, libjte.c, libjte_private.h: Moved
+  static variables from write_compressed_chunk() into libjte_env
+  Replaced static local return buffer in base64_dump() by calloc memory.
+* configure.ac: -std=c99 since we are using 'long long' here and there, which is a 
+  valid type in C99, still nothing guarantees it is 64-bit a-la (u)int64_t.
+* bin/gen-jigdo-md5-list: simple jigdo md5 list generator.
+* checksum.c, jte.c, jte.h, libjte.c, libjte.h, libjte.ver, libjte_private.h, md5.c: 
+  Introduced a message list which can be used instead of fprintf(stderr), error 
+  indicating return values, and an opportunity to avoid exit(). New API functions
+  libjte_set_error_behavior(), libjte_get_next_message(), libjte_clear_msg_list().
+  Changed return values with API calls libjte_write_unmatched() and 
+  libjte_write_match_record().
+* jte.c, jte.h, libjte.c, libjte_private.h: get rid of globals.
+* configure.ac, jte.c, libjte.c: use LIBJTE_WITH_LIBBZ2 rather than 
+  LIBJTE_WITH_LIBBZIP2.
+* configure.ac, jte.c: fix bz2 test linkage and conditional header include.
+* libjte.c, libjte.h, libjte.ver, libjte_private.h: Thomas; setter for image size.
+* jte.c, jte.h: avoid SIGSEGV in jte_add_mapping() is the parameter is a constant
+  string drop SECTOR_SIZE and last_extent_written, image size could be deduced 
+  inside libjte change generator field from JTE to libjte.
+* acinclude.m4: use libjte.ver as linker script.
+* checksum.c: drop C++ style comment as they are anti C99
+* Makefile.am, configure.ac: set and put ACLOCAL_AMFLAGS (Makefile.am) and 
+  AC_CONFIG_MACRO_DIR(configure.ac) in sync.
+* bootstrap: add a directory for aclocal to search for m4 files.
+* Makefile.am, acinclude.m4, aclocal.m4, bootstrap, compile,
+  configure.ac, depcomp, install-sh, libjte-1.pc.in, libjte.ver,
+  libtool, ltmain.sh, missing, version.h.in: added Empire as sent by Thomas.
+* libjte.h, libjte_private.h: added preliminary API suggested by Thomas.
+* Makefile, jte.c: missing includes and D_LARGEFILE_SOURCE directive.
+* Added _FILE_OFFSET_BITS=64 directive to compiler.
+* checksum.h, endianconv.h: more include guards.
+* jte.c, jte.h: added include guards, include it in *.c.
+* jte.h: include stdio.h for FILE and unistd.h for off_t.
+* checksum.c: close(fd) on a bailing out.
+* jte.c: add the only diff (fix) between cdrkit 1.10.0 
+  and cdrkit svn trunk, rev844.
+* jte.c: drop unneeded ifdefs checking for libschily.
+* rsync.c: drop unneeded includes, use stdint.h for unint32_t and 
+  string.h for size_t.
+* checksum.c: drop unneeded includes.
+* Added doc/NOTES, doc/TODO, doc/doxyfile files.
+* endian.c, endianconv.h: added endianconv.h also included it back into endian.c
+* endian.c: comment eventually unneeded includes.
+* jte.c: commented genisoimage includes; added few more from standard lib
+* Added checksum.c, checksum.h, endian.c, jte.c, jte.h, rsync.c, sha1.c,
+  sha1.h, sha256.c, sha256.h, sha512.c, sha512.h: extracted JTE
+  code from cdrkit 1.1.10.

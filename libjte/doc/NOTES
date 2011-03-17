@@ -1,0 +1,149 @@
+libjte internals
+~~~~~~~~~~~~~~~~
+See API file for the public interface.
+
+
+Jigdo options for xorriso/libisoburn
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Implemented are :
+-jigdo-jigdo FILE           Produce a jigdo .jigdo file as well as the .iso
+-jigdo-template FILE        Produce a jigdo .template file as well as the .iso
+-jigdo-min-file-size SIZE   Minimum size for a file to be listed in the jigdo file
+-jigdo-force-md5 PATTERN    Pattern(s) where files MUST match an externally-supplied MD5sum
+-jigdo-exclude PATTERN      Pattern(s) to exclude from the jigdo file
+-jigdo-map PATTERN1=PATTERN2 Pattern(s) to map paths (e.g. Debian=/mirror/debian)
+-md5-list FILE              File containing MD5 sums of the files that should be checked
+-jigdo-template-compress ALGORITHM Choose to use gzip or bzip2 compression for template data; default is gzip
+
+Not yet implemented:
+-checksum_algorithm_iso alg1,alg2,... Specify the checksum types desired for the output image
+-checksum_algorithm_template alg1,alg2,... Specify the checksum types desired for the output jigdo template
+
+Example: xorriso/genisoimage -J -r -o /home/steve/test1.iso \
+     -jigdo-jigdo /home/steve/test1.jigdo \
+     -jigdo-template /home/steve/test1.template \
+     -jigdo-min-file-size 16384 \
+     -jigdo-exclude "README*" \
+     -jigdo-force-md5 "/pool/" \
+     -jigdo-map Debian=/mirror/debian \
+     -md5-list /home/steve/md5.list \
+     /mirror/jigdo-test
+
+Global variables from application POV (declated in jte.h)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+- extern char *jtemplate_out;
+  XORRISO: -jigdo-template filepath
+
+- extern char *jjigdo_out;
+  XORRISO: -jigdo-jigdo filepath
+
+- extern char *jmd5_list;
+  XORRISO: -md5-list filepath
+
+- extern FILE *jtjigdo;
+  XORRISO: handle initialized with -jigdo-jigdo filepath
+
+- extern FILE *jttemplate;
+  XORRISO: resp. handle for template
+
+- int  jte_min_size; 
+  XORRISO: -jigdo-min-file-size
+
+- int checksum_algo_iso;
+  XORRISO: -checksum_algorithm_iso alg1,alg2,...
+
+- int checksum_algo_tmpl;
+  XORRISO: -checksum_algorithm_template alg1,alg2,... 
+
+- jtc_t jte_template_compression (type declated in jte.h)
+  XORRISO: -jigdo-template-compress
+  
+
+Callers from the application POV (genisoimage as example)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+(all of these are called if jigdo representation is requested by the
+user, i.e. path to .jigdo and .template were given via options):
+
+- void write_jt_header(FILE *template_file, FILE *jigdo_file);
+  DESCRIPTION: call after .jigdo and .template file handles are opened.
+  PARAMETERS: obvious
+  XORRISO: to provide -jigdo-jigdo and -jigdo-template
+
+- void write_jt_footer(void);
+  DESCRIPTION: call after image and .jigdo and .template files are complated
+               also do close file handles for .jigdo and .template.
+  PARAMETERS: none
+  XORRISO: calls that somewhere in finalization code?
+
+- void jtwrite(void *buffer, int size, int count, int submode, BOOL islast);
+  DESCRIPTION: call that on each place where data is written to the image,
+               after list_file_in_jigdo() and write_jt_match_record() are called.
+  PARAMETERS: fairly obvious
+  LIBISOFS: see below in list_file_in_jigdo() section
+
+- void write_jt_match_record(char *filename, char *mirror_name, int sector_size, off_t size, unsigned char md5[16]);
+  DESCRIPTION: to be called after list_file_in_jigdo() call:
+               int include_in_jigdo = list_file_in_jigdo()
+               if (include_in_jigdo)
+                   write_jt_match_record();
+               ...
+               call_to_write_data_to_image();
+               if (!include_in_jigdo)
+                   jtwrite();
+  PARAMETERS: filename - disk file path
+              mirror_name - as returned previously by list_file_in_jigdo()
+  LIBISOFS:   see below in list_file_in_jigdo() section
+
+- int  list_file_in_jigdo(char *filename, off_t size, char **realname, unsigned char md5[16]);
+  DESCRIPTION: decides whether a file should be placed in .jigdo
+  PARAMETERS: filename - disk file path
+              mirror_name - to be returned and given to write_jt_match_record()
+	      md5[16] - We have the MD5. But ok. If it works that way then we should not 
+	      change it without need. Eventually write a new function without calling 
+	      calculate_md5sum(), but supply the md5sum instead as we already have it on that
+              libisofs spot.
+  LIBISOFS: libisofs/filesrc.c:filesrc_writer_write_data() has a loop which iterates over the 
+            array of IsoFileSrc of all data files and writes their data content to the output stream.
+
+- int  jte_add_exclude(char *pattern);
+  DESCRIPTION: files matching patterns to be included in .jigdo
+  PARAMETERS: pattern string
+  XORRISO: -jigdo-exclude "README*"
+
+- int  jte_add_include(char *pattern);
+  DESCTIPRITON: files matching patterns to be included in .jigdo
+  PARAMETERS: pattern string
+  XORRISO: -jigdo-force-md5 "/pool/"
+
+- int  jte_add_mapping(char *arg);
+  DESCRIPTION: provides String:/a/b/c mappings for [Parts] section .jigdo file
+  PARAMETERS: arg - Debian=/mirror/debian
+  XORRISO: -jigdo-map Debian=/mirror/debian
+
+
+>>> Where are the argument parsers of algorithm setters ?
+
+- libjte: MD5, size, and basename of the path have to match MD5, size,
+  and basename of the data file.
+
+- libjte: The directory part of path is just a literal string that shall be
+  checked for the address mapping
+     -jigdo-map Debian=literal_md5_path_start
+
+-jigit-mkimage: The directory part of the path is of importance when producing
+  the payload image from template file.
+  - If the payload image gets generated by option -j jigdo_file, then
+    the disk file address of a data file gets composed from the reverse
+    mapping
+      -m Debian=/really/usable/path/for/fopen
+    and the parts of the path, that was not consumed by the genisoimage
+    mapping.
+  - If the payload image gets generated by option -f md5_file, then the
+    paths in the md5_file have to be usable for fopen().
+
+If we follow the mainstream and ignore the case of jigit-mkimage -f md5_file,
+then we can reduce the constraint for paths in .md5 to the advise to use
+absolute paths in a literally coordinated way with the jigdo generator.
+
+
+

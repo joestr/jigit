@@ -1,0 +1,7 @@
+#!/bin/sh
+
+help2man -n "create a list of MD5sums encoded in hexidecimal format and print to standard output" \
+         -N ../bin/jigdo-gen-md5-list \
+	 > jigdo-gen-md5-list.1
+
+cat jigdo-gen-md5-list.inc >> jigdo-gen-md5-list.1 

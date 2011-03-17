@@ -1,0 +1,12 @@
+libjte API
+~~~~~~~~~~
+
+API is defined and documented via libjte.h.
+It is also controlled via a linker version script libjte.ver.
+
+Examples: 
+ test/demo.c
+
+Self generated documentaton: 
+ $ doxygen doc/doxyfile 
+ $ output: doc/doxygen/

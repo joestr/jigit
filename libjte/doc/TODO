@@ -1,0 +1,25 @@
+EASY
+~~~~
+* Constantly improving configure.ac by autoscan (from autoconf), as
+  we add new C code here and there.
+* Drop libjte_private.h, merge with jte.h which is equally private
+* Drop 'extern' from function declaration in *.h.
+* Rename endian.c to endianconv.h to match the private header?
+
+NOT SO EASY
+~~~~~~~~~~~
+* Write a cousin to list_file_in_jigdo() without calculating md5 inside,
+  since it is likely image-generators already have that computed.
+
+  A side effect to avoid: a matched file will get read three times so far:
+  - In list_file_in_jigdo() by calculate_md5sum(filename, size, md5);
+  - In write_jt_match_record() by if ((infile = fopen(filename, "rb")) == NULL) {
+  - By the IsoFileSource object in the libisofs data file loop.
+  Should that be optimized a bit? How?
+
+* Jigdo production does not play well with ISO 9660 multi-session.
+  Multi-session on disk files implies overwriting of the Volume Descriptors
+  at block 16 ff. To overwrite the corresponding piece in a template file
+  seems to be quite a challenge. Compressed size might change.
+  So for now: single session images only.
+  
