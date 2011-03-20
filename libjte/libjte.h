@@ -26,9 +26,9 @@ struct libjte_env;
     at build time.
     @since 0.1.0
 */
-#define LIBJTE_VERSION_MAJOR   0
-#define LIBJTE_VERSION_MINOR   1
-#define LIBJTE_VERSION_MICRO   1
+#define LIBJTE_VERSION_MAJOR   1
+#define LIBJTE_VERSION_MINOR   0
+#define LIBJTE_VERSION_MICRO   0
 
 /** Obtain the three release version numbers of the library. These are the
     numbers encountered by the application when linking with libjte
