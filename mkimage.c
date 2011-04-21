@@ -211,23 +211,38 @@ static int find_file_in_mirror(char *jigdo_match, char *jigdo_name,
                                char *match, INT64 *file_size, char **mirror_path)
 {
     match_list_t *entry = match_list_head;
-    char path[PATH_MAX];
+    char *path = NULL;
+    int path_size = 0;
+    int jigdo_name_size = strlen(jigdo_name);
 
     while (entry)
     {
         if (!strcmp(entry->match, match))
         {
+            int mirror_path_size = strlen(entry->mirror_path);
+            if ((jigdo_name_size + 2 + mirror_path_size) > path_size)
+            {
+                free(path);
+                /* grow by 100 characters more than we need, to reduce
+                 * time taken in malloc if we work through lengthening
+                 * paths. */
+                path_size = jigdo_name_size + mirror_path_size + 100;
+                path = malloc(path_size);
+                if (!path)
+                    return ENOMEM;
+            }
+            
             sprintf(path, "%s/%s", entry->mirror_path, jigdo_name);
             if (file_exists(path, file_size))
             {
-                *mirror_path = strdup(path);
+                *mirror_path = path;
                 return 0;
             }
         }
         entry = entry->next;
     }
     
-    *mirror_path = jigdo_name;
+    free(path);
     return ENOENT;
 }
 
@@ -360,30 +375,51 @@ static int add_file_entry(char *jigdo_entry)
     }
 
     if (find_file_in_md5_list((unsigned char *)base64_md5, 0))
+    {
+        free(jigdo_entry);
         return 0; /* We already have an entry for this file; don't
                    * waste any more time on it */
+    }
 
     /* else look for the file in the filesystem */
     if (NULL == match || NULL == jigdo_name)
     {
         fprintf(logfile, "Could not parse malformed jigdo entry \"%s\"\n", jigdo_entry);
+        free(jigdo_entry);
         return EINVAL;
     }
-    error = find_file_in_mirror(match, jigdo_name, match, &file_size, &file_name);
 
-    if (error)
+    error = find_file_in_mirror(match, jigdo_name, match, &file_size, &file_name);
+    switch (error)
     {
-        if (missing_filename)
-            add_md5_entry(MISSING, base64_md5, file_name);
-        else
-        {
-            fprintf(logfile, "Unable to find a file to match %s\n", file_name);
+        case 0:
+            base64_md5 = strdup(jigdo_entry);
+            if (base64_md5)
+            {
+                add_md5_entry(file_size, base64_md5, file_name);
+                free(jigdo_entry);
+                break;
+            }
+            /* else, fall through... */
+
+        case ENOMEM:
+            fprintf(logfile, "Unable to allocate memory looking for %s\n", jigdo_name);
             fprintf(logfile, "Abort!\n");
-            exit (ENOENT);
-        }
+            exit (ENOMEM);
+            break;
+
+        default: /* ENOENT */
+            if (missing_filename)
+                add_md5_entry(MISSING, base64_md5, jigdo_name);
+            else
+            {
+                fprintf(logfile, "Unable to find a file to match %s\n", file_name);
+                fprintf(logfile, "Abort!\n");
+                exit (ENOENT);
+            }
+            break;
     }
-    else
-        add_md5_entry(file_size, base64_md5, file_name);
+
     return 0;
 }
 
