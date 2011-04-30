@@ -1,4 +1,4 @@
-Version 1.17 (2011/04/30)
+Version 1.18 (2011/04/30)
 
  * More dynamic memory handling in mkimage, instead of allocating
    fixed-size strings on the stack. Should now work on Hurd too.
