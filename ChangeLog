@@ -1,3 +1,19 @@
+Version 1.17 (2011/04/30)
+
+ * More dynamic memory handling in mkimage, instead of allocating
+   fixed-size strings on the stack. Should now work on Hurd too.
+ * Fix man page syntax errors.
+ * s,config.h,../config.h, in libjte for easier use by the xorriso folks
+
+Version 1.17 (2011/03/16)
+
+ * Rename mkimage to jigit-mkimage, to avoid a naming clash.
+ * Sanity-check jigdo files - require a valid JigsawDownload
+   header by default.
+ * Multiple fixes for how MD5 comparisons are dealt with.
+ * Add libjte - jigdo generation code that used to be embedded in
+   mkisofs/genisoimage. Now a shared library useable in xorriso etc.
+
 Version 1.16 (2007/10/18)
 
  * Remove build-stamp from the release tarball, to make debian package
