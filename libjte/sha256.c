@@ -25,7 +25,7 @@
 /* Written by Ulrich Drepper <drepper@redhat.com>, 2007.  */
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+#include "../config.h"
 #endif
 
 #include <stdlib.h>

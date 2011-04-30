@@ -44,7 +44,7 @@
    library. s/cvs_/mk_/ across the source */
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+#include "../config.h"
 #endif
 
 #include <string.h>	/* for memcpy() and memset() */
