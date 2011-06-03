@@ -2,59 +2,99 @@
 #
 # mkjigsnap
 #
-# (c) 2004 Steve McIntyre
+# (c) 2004-2011 Steve McIntyre <steve@einval.com>
 #
 # Server-side wrapper; run this on a machine with a mirror to set up
-# the snapshots for jigit
+# the snapshots for jigit / jigdo downloading
 #
 # GPL v2 - see COPYING 
 #
+# This script can be run in two modes:
+#
+# 1. To build a jigit .conf file for a single jigdo file:
+#    add the "-n" option with a CD name on the command line
+#    and only specify a single jigdo to work with using "-j".
+#
+# 2. To build a snapshot tree for (potentially multiple) jigdo files:
+#    do *not* specify the "-n" option, and list as many jigdo files as
+#    desired, either on the command line using multiple "-j <jigdo>" options
+#    or (better) via a file listing them with the "-J" option.
+#
 # Some things needed:
-#   CD name of the jigit
-#   location of the mirror
-#   output location; where the jigdo, template file and 
-#      snapshot will be written
-#   the locations of the input jigdo and template files
-#   the keyword to look for (e.g. Debian)
+#   (single-jigdo mode only) the CD name of the jigit
+#   (single-jigdo mode only) the output location; where the jigdo, template
+#      file and snapshot will be written
+#   (single-jigdo mode only) the locations of the input jigdo and template
+#      files
+#   the location of the mirror
+#   the keyword(s) to look for (e.g. Debian)
 #   the snapshot dirname (e.g. today's date)
-# Example:
-# ./mkjigsnap -o /tmp/mjs-test -n mjs-test -m /tmp/mirror \
-#      -j ~/jigdo/update/debian-update-3.0r2.01-i386.jigdo \
-#      -t ~/jigdo/update/debian-update-3.0r2.01-i386.template \
-#      -k Debian -k Non-US
-#      -d 20041017
+#
+# Example #1: (single-jigdo mode, used for Ubuntu jigit generation)
+#
+#   mkjigsnap -o /tmp/mjs-test -n mjs-test -m /tmp/mirror \
+#        -j ~/jigdo/update/debian-update-3.0r2.01-i386.jigdo \
+#        -t ~/jigdo/update/debian-update-3.0r2.01-i386.template \
+#        -k Debian -k Non-US
+#        -d 20041017
+#
+#   (This creates a single jigit conf file using the supplied jigdo/template
+#    file pair, looking for jigdo references to files in the "Debian" and
+#    "Non-US" areas. Output the files into /tmp/mjs-test and call them
+#    "mjs-test.<ext>", creating a snapshot of the needed files in
+#    /tmp/mjs-test/20041017 by linking files from /tmp/mirror as needed.)
+#
+# Example #2: (multi-jigdo mode, as run to keep
+#              http://us.cdimage.debian.org/cdimage/snapshot/ up to date)
+#
+# mkjigsnap -m /org/ftp/debian -J ~/jigdo.list -T ~/tmp \
+#      -k Debian \
+#      -d /org/jigdo-area/snapshot/Debian \
+#      -f ~/mkjigsnap-failed.log \
+#      -i ~/mkjigsnap-ignore.list
+#
+#   (This reads in all the jigdo files listed in ~/jigdo.list, building a
+#    list of all the files referenced in the "Debian" area. It will then
+#    attempt to build a snapshot tree of all those files under
+#    /org/jigdo-area/snapshot/Debian by linking from /org/ftp/debian. Any
+#    files that are missing will be listed into the output "missing" file
+#    ~/mkjigsnap-failed.log for later checking, UNLESS they are already listed
+#    in the "ignore" file ~/mkjigsnap-ignore.list.)
+#      
 
+JIGDOS=""
+MODE="multi"
+DRYRUN=0
+VERBOSE=0
+STARTDATE=`date`
+
+# Parse command line
 while [ $# -gt 0 ]
 do
     case "$1"x in
-        "-n"x)
+        "-d"x)
             shift
-            CDNAME=$1
-            shift
-            ;;
-        "-m"x)
-            shift
-            MIRROR=$1
+            DIRNAME=$1
             shift
             ;;
-        "-o"x)
+        "-f"x)
             shift
-            OUT=$1
+            FAILEDFILE=$1
+            shift
+            ;;
+        "-i"x)
+            shift
+            IGNOREFILE=$1
+            shift
+            ;;
+        "-J"x)
+            shift
+            JIGDOLIST=$1
             shift
             ;;
         "-j"x)
             shift
-            JIGDO=$1
-            shift
-            ;;
-        "-t"x)
-            shift
-            TEMPLATE=$1
-            shift
-            ;;
-        "-d"x)
-            shift
-            DIRNAME=$1
+            JIGDOS="$JIGDOS $1"
             shift
             ;;
         "-k"x)
@@ -62,80 +102,366 @@ do
             KEYWORDS="$KEYWORDS $1"
             shift
             ;;
+        "-m"x)
+            shift
+            MIRROR=$1
+            shift
+            ;;
+        "-N"x)
+            shift
+            DRYRUN=1
+            ;;
+        "-n"x)
+            MODE="single"
+            shift
+            CDNAME=$1
+            shift
+            ;;
+        "-o"x)
+            shift
+            OUT=$1
+            shift
+            ;;
+        "-T"x)
+            shift
+            TF_TMPDIR="--directory $1"
+            SORT_TMPDIR="-T $1"
+            shift
+            ;;
+        "-t"x)
+            shift
+            TEMPLATE=$1
+            shift
+            ;;
+        "-v"x)
+            shift
+            VERBOSE=1
+            ;;
         ""*)
-            echo "Input error!"
+            echo "Input error! ($1)"
             exit 1
             ;;
     esac
 done
 
-if [ "$CDNAME"x = ""x ] ; then
-    echo "You must specify the output name for the jigit conf!"
-    exit 1
-fi
+export DRYRUN
+export VERBOSE
 
-if [ "$MIRROR"x = ""x ] ; then
-    echo "You must specify the location of the mirror!"
-    exit 1
-fi
-    
-if [ "$OUT"x = ""x ] ; then
-    echo "You must specify where to set up the snapshot!"
-    exit 1
-fi
-    
-if [ "$JIGDO"x = ""x ] ; then
-    echo "You must specify the jigdo file!"
-    exit 1
-fi
-    
-if [ "$TEMPLATE"x = ""x ] ; then
-    echo "You must specify the template file!"
-    exit 1
-fi
-    
+generate_snapshot_tree () {
+    NUM=$1
+    MIRROR=$2
+    DIRNAME=$3
+    FAILEDFILE=$4
+    IGNOREFILE=$5
+    TMPFILE=$6
+
+    (echo $NUM; echo $MIRROR; echo $DIRNAME; echo $FAILEDFILE; echo $IGNOREFILE; cat $TMPFILE ) | perl -we '
+    use File::Basename;
+    use File::Find;
+    my $dryrun = $ENV{"DRYRUN"};
+    my $verbose = $ENV{"VERBOSE"};
+    my $num;
+    my $mirrorpath;
+    my $outdir;
+    my $dirname;
+    my $filename;
+    my $failedlog;
+    my $ignorefile;
+    my $done = 0;
+    my $failed = 0;
+    my $ignored = 0;
+    my @file_list;
+    my @failed_files;
+    my @ignored_fails;
+    my $old_deleted = 0;
+    my $link;
+    $| = 1;
+
+    # Make a dir tree
+    sub mkdirs {
+        my $input = shift;
+        my $dir;
+        my @components;
+        my $need_slash = 0;
+
+        if (! -d $input) {
+            if ($verbose) {
+                print "mkdirs($input)\n";
+            }
+            if (!$dryrun) {
+                @components = split /\//,$input;
+                foreach $component (@components) {
+                    if ($need_slash) {
+                        $dir = join ("/", $dir, $component);
+                    } else {
+                        $dir = $component;
+                        $need_slash = 1;
+                    }
+                    mkdir $dir;
+                }
+            } else {
+                print "DRYRUN: not making directory tree $input\n";
+            }
+        }
+    }        
+
+    sub delete_redundant {
+        my $ref;
+
+        if (-f) {
+            $ref = $file_list{$File::Find::name};
+            if (!defined($ref)) {
+                if ($verbose) {
+                    print "delete_redundant($File::Find::name)\n";
+                }
+                if (!$dryrun) {
+                    unlink($File::Find::name);
+                } else  {
+                    print "DRYRUN: not deleting $File::Find::name\n";
+                }
+                $old_deleted++;
+                if ( !($old_deleted % 1000) ) {
+                    print "$old_deleted\n";
+                }
+            }
+        }
+    }
+
+    sub parse_ignore_file {
+        my $inputfile = shift;
+        my $num_ignored_loaded = 0;
+        open(INLIST, "$inputfile") or return;
+        while (defined (my $pkg = <INLIST>)) {
+            chomp $pkg;
+            $ignored_fails{$pkg}++;
+            $num_ignored_loaded++;
+        }
+        print "parse_ignore_file: loaded $num_ignored_loaded entries from file $inputfile\n";
+    }
+
+    while (<>) {
+        chomp;
+
+        if (!defined($num)) {
+            $num = $_;
+            next;
+        }
+        if (!defined($mirrorpath)) {
+            $mirrorpath = $_;
+            next;
+        }
+        if (!defined($outdir)) {
+            $outdir = $_;
+            print "Linking $num files from $mirrorpath to $outdir\n";
+            next;
+        }
+        if (! -d $outdir) {
+            print "$outdir does not exist\n";
+            if (!$dryrun) {
+                mkdirs($outdir);
+            } else {
+                die "DRYRUN: not making it, so aborting\n";
+            }
+        }
+        if (!defined($failedlog)) {
+           $failedlog = $_;
+           next;
+        }
+        if (!defined($ignorefile)) {
+            $ignorefile = $_;
+                print "ignorefile is \"$ignorefile\"\n";
+            if (length($ignorefile) > 2) {
+                parse_ignore_file($ignorefile);
+            }
+            next;
+        }
+
+        $outfile = $outdir . "/" . $_;
+        $file_list{$outfile}++;
+        if (! -e $outfile) {
+            $dirname = dirname($_);
+            $filename = basename($_);
+            mkdirs($outdir . "/" . $dirname);
+
+            my $link_ok = 0;
+            foreach $mirror (split /:/,$mirrorpath) {
+                $infile = $mirror . "/" . $_;
+                if (-l $infile) {
+                    $link = readlink($infile);
+                    if ($link =~ m#^/#) {
+                        $infile = $link;
+                    } else {
+                        $infile = dirname($infile) . "/" . $link;
+                    }
+                }
+                if ($verbose) {
+                    print "look for $_:\n";
+                }             
+                $outfile = $outdir . "/" . $_;
+                if (!$dryrun) {
+                    if ($verbose) {
+                        print "  try $infile\n";
+                    }
+                    if (link ($infile, $outfile)) {
+                        $link_ok = 1;
+                        last;
+                    }
+                } else {
+                    print "DRYRUN: not linking $infile to $outfile\n";
+                    $link_ok = 1;
+                    last;
+                }
+                $infile = $mirror . "/" . $filename;
+                if ($verbose) {
+                    print "  fallback: try $infile\n";
+                }
+                if (!$dryrun) {
+                    if (link ($infile, $outfile)) {
+                        $link_ok = 1;
+                        last;
+                    }
+                } else {
+                    print "DRYRUN: not linking $infile to $outfile\n";
+                    $link_ok = 1;
+                    last;
+                }
+            }
+            if ($link_ok == 0) {
+                if ($ignored_fails{$_}) {
+                    $ignored++;
+                } else {
+                    if (length($failedlog) <= 2) {
+                        # No logfile, print to stdout then
+                        print "\nFailed to create link $outfile\n";
+                    }
+                    $failed++;
+                    push (@failed_files, $_);
+                }
+            } else {
+                if ($ignored_fails{$_}) {
+                    print "\n$_ marked as failed, but we found it anyway!\n";
+                }
+            }
+        }
+        $done++;
+        if ( !($done % 10000) ) {
+            print "$done done, ignored $ignored, failed $failed out of $num\n";
+        }
+    }
+    print "  Finished: $done/$num, $failed failed, ignored $ignored\n\n";
+
+    if ((length($failedlog) > 2) && ($failed > 0)) {
+        print "Writing list of failed files to $failedlog\n";
+        open(FAIL_LOG, "> $failedlog") or die "Failed to open $failedlog: $!\n";
+        foreach my $missing (@failed_files) {
+            print FAIL_LOG "$missing\n";
+        }
+        close FAIL_LOG;
+    }
+
+    # Now walk the tree and delete files that we no longer need
+    print "Scanning for now-redundant files\n";
+    find(\&delete_redundant, $outdir);
+    print "  Finished: $old_deleted old files removed\n";
+'
+}
+
+# Sanity-check arguments
 if [ "$DIRNAME"x = ""x ] ; then
     echo "You must specify the snapshot directory name!"
     exit 1
-fi
-    
+fi    
 if [ "$KEYWORDS"x = ""x ] ; then
     echo "You must specify the keywords to match!"
     exit 1
 fi
+if [ "$MIRROR"x = ""x ] ; then
+    echo "You must specify the location of the mirror!"
+    exit 1
+fi
+NUM_JIGDOS=0
+if [ "$JIGDOS"x != ""x ] ; then
+    NUM_JIGDOS=$(($NUM_JIGDOS+`echo $JIGDOS | wc -w`))
+fi
+if [ "$JIGDOLIST"x != ""x ] ; then
+    NUM_JIGDOS=$(($NUM_JIGDOS+`cat $JIGDOLIST | wc -w`))
+fi
+if [ "$NUM_JIGDOS" -eq 0 ] ; then
+    echo "No jigdo file(s) specified!"
+    exit 1
+fi    
+if [ $MODE = "single" ] ; then
+    if [ "$CDNAME"x = ""x ] ; then
+        echo "You must specify the output name for the jigit conf!"
+        exit 1
+    fi
+    if [ "$OUT"x = ""x ] ; then
+        echo "You must specify where to set up the snapshot!"
+        exit 1
+    fi
+    if [ "$TEMPLATE"x = ""x ] ; then
+        echo "You must specify the template file!"
+        exit 1
+    fi
+    if [ "$NUM_JIGDOS" -ne 1 ] ; then
+        echo "More than one jigdo file specified ($NUM_JIGDOS) in single-jigdo mode!"
+        exit 1
+    fi    
+    # In single-jigdo mode, the snapshot directory is relative to the
+    # output dir
+    DIRNAME="$OUT"/"$DIRNAME"
+else
+    if [ "$CDNAME"x != ""x ] ; then
+        echo "Output name is meaningless for multi-jigdo mode!"
+        exit 1
+    fi
+    if [ "$OUT"x != ""x ] ; then
+        echo "Output dir is meaningless for multi-jigdo mode!"
+        exit 1
+    fi
+    if [ "$TEMPLATE"x != ""x ] ; then
+        echo "Template file name is meaningless for multi-jigdo mode!"
+        exit 1
+    fi
+fi
 
-# If we got here, we have all the info we need
-echo "Creating snapshot tree:"
-for KEYWORD in $KEYWORDS
-do
-    NUM=$(( $NUM + `zcat -f $JIGDO | grep "$KEYWORD:" | wc -l`))
+# Build the snapshot(s)
+for KEYWORD in $KEYWORDS; do
+    echo "Looking for keyword $KEYWORD in $NUM_JIGDOS jigdo file(s):"
+    TMPFILE=`tempfile $TF_TMPDIR`
+    if [ "$JIGDOLIST"x != ""x ] ; then
+        cat $JIGDOLIST | xargs zcat -f | sed -n "s/^.*${KEYWORD}://gp" >> $TMPFILE
+    fi
+    if [ "$JIGDOS"x != ""x ] ; then 
+        zcat -f $JIGDOS | sed -n "s/^.*${KEYWORD}://gp" >> $TMPFILE
+    fi
+    LISTDONEDATE=`date -u`
+    TMPFILE1=`tempfile $TF_TMPDIR`
+    TOTAL_FILES=`wc -l < $TMPFILE`
+    echo "  $LISTDONEDATE: Total references for \"$KEYWORD\": $TOTAL_FILES"
+
+    cat $TMPFILE | sort -u $SORT_TMPDIR > $TMPFILE1
+    SORTDONEDATE=`date -u`
+    mv -f $TMPFILE1 $TMPFILE
+    NUM_FILES=`wc -l < $TMPFILE`
+    echo "  $SORTDONEDATE: Unique references for \"$KEYWORD\": $NUM_FILES"
+
+    echo "Creating snapshot tree in $DIRNAME:"
+    generate_snapshot_tree "$NUM_FILES" "$MIRROR" "$DIRNAME" "$FAILEDFILE" "$IGNOREFILE" "$TMPFILE"
+    SNAPDONEDATE=`date -u`
+
+    echo "$STARTDATE: startup"
+    echo "$LISTDONEDATE: $TOTAL_FILES files found"
+    echo "$SORTDONEDATE: $NUM_FILES unique files after sorting"
+    echo "$SNAPDONEDATE: snapshot done"
 done
-LINKS_DONE=0
-for KEYWORD in $KEYWORDS
-do
-    for jentry in `zcat -f $JIGDO | grep =$KEYWORD:`
-    do
-        file=`echo $jentry | sed "s/^.*$KEYWORD://g"`
-        dir=$OUT/snapshot/$DIRNAME/`dirname $file`
-        if [ ! -d $dir ] ; then
-            mkdir -p $dir
-        fi
-        ln -f $MIRROR/$file $OUT/snapshot/$DIRNAME/$file
-        error=$?
-        if [ $error -ne 0 ] ; then
-            echo "Unable to link $MIRROR/$file; error $error"
-            exit 1
-        fi
-        LINKS_DONE=$(($LINKS_DONE + 1))
-        printf "\r%d/%d links created" $LINKS_DONE $NUM
-    done
-done
 
-echo
-
-zcat -f $JIGDO | sed "s:^Template=.*$:Template=$CDNAME.template:" | gzip -9 > $OUT/$CDNAME.jigdo
-cp $TEMPLATE $OUT/$CDNAME.template
-echo "JIGDO=$CDNAME.jigdo" > $OUT/$CDNAME.conf
-echo "TEMPLATE=$CDNAME.template" >> $OUT/$CDNAME.conf
-echo "SNAPSHOT=snapshot/$DIRNAME" >> $OUT/$CDNAME.conf
+if [ $MODE = "single" ] ; then
+    zcat -f $JIGDOS | sed "s:^Template=.*$:Template=$CDNAME.template:" | gzip -9 > $OUT/$CDNAME.jigdo
+    cp $TEMPLATE $OUT/$CDNAME.template
+    echo "JIGDO=$CDNAME.jigdo" > $OUT/$CDNAME.conf
+    echo "TEMPLATE=$CDNAME.template" >> $OUT/$CDNAME.conf
+    echo "SNAPSHOT=snapshot/$DIRNAME" >> $OUT/$CDNAME.conf
+    echo "Jigdo files, config and snapshot made in $OUT"
+fi
 
