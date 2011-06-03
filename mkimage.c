@@ -311,7 +311,7 @@ static int parse_md5_entry(char *md5_entry)
         file_name[strlen(file_name) - 1] = 0;
     
     error = add_md5_entry(UNKNOWN, md5, file_name);
-    return 0;
+    return error;
 }
 
 static int parse_md5_file(char *filename)
@@ -334,6 +334,8 @@ static int parse_md5_file(char *filename)
         if (NULL == ret)
             break;
         error = parse_md5_entry(strdup(buf));
+        if (error)
+            return error;
     }
     return 0;
 }
@@ -1223,7 +1225,7 @@ int main(int argc, char **argv)
         error = parse_md5_file(md5_filename);
         if (error)
         {
-            fprintf(logfile, "Unable to parse the MD5 file %s\n", md5_filename);
+            fprintf(logfile, "Unable to parse the MD5 file %s, error %d\n", md5_filename, error);
             return error;
         }
     }
