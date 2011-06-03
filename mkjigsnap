@@ -457,11 +457,15 @@ for KEYWORD in $KEYWORDS; do
 done
 
 if [ $MODE = "single" ] ; then
-    zcat -f $JIGDOS | sed "s:^Template=.*$:Template=$CDNAME.template:" | gzip -9 > $OUT/$CDNAME.jigdo
-    cp $TEMPLATE $OUT/$CDNAME.template
-    echo "JIGDO=$CDNAME.jigdo" > $OUT/$CDNAME.conf
-    echo "TEMPLATE=$CDNAME.template" >> $OUT/$CDNAME.conf
-    echo "SNAPSHOT=snapshot/$DIRNAME" >> $OUT/$CDNAME.conf
-    echo "Jigdo files, config and snapshot made in $OUT"
+    if [ "$DRYRUN" = "0" ] ; then
+        zcat -f $JIGDOS | sed "s:^Template=.*$:Template=$CDNAME.template:" | gzip -9 > $OUT/$CDNAME.jigdo
+        cp $TEMPLATE $OUT/$CDNAME.template
+        echo "JIGDO=$CDNAME.jigdo" > $OUT/$CDNAME.conf
+        echo "TEMPLATE=$CDNAME.template" >> $OUT/$CDNAME.conf
+        echo "SNAPSHOT=snapshot/$DIRNAME" >> $OUT/$CDNAME.conf
+        echo "Jigdo files, config and snapshot made in $OUT"
+    else
+        echo "DRYRUN: Not creating files in $OUT"
+    fi
 fi
 
