@@ -650,6 +650,7 @@ int write_jt_header(struct libjte_env *o,
 }
 
 /* Compress and flush out a buffer full of template data */
+/* Return 0 on failure, non-zero on success */
 static int flush_gzip_chunk(struct libjte_env *o, void *buffer, off_t size)
 {
 
@@ -667,31 +668,60 @@ static int flush_gzip_chunk(struct libjte_env *o, void *buffer, off_t size)
     c_stream.opaque = NULL;
 
     err = deflateInit(&c_stream, Z_BEST_COMPRESSION);
+    if (err < 0)
+        return 0;
+    
     if (NULL == (comp_buf = malloc(2 * size))) /* Worst case */
         return 0;
+
     c_stream.next_out = comp_buf;
     c_stream.avail_out = 2 * size;
     c_stream.next_in = buffer;
     c_stream.avail_in = size;
     
     err = deflate(&c_stream, Z_NO_FLUSH);
+    if (err < 0)
+    {
+        free(comp_buf);
+        return 0;
+    }
+
     err = deflate(&c_stream, Z_FINISH);
+    if (err < 0)
+    {
+        free(comp_buf);
+        return 0;
+    }
     
     compressed_size_out = c_stream.total_out + 16;
     err = deflateEnd(&c_stream);
+    if (err < 0)
+    {
+        free(comp_buf);
+        return 0;
+    }
 
     if (template_fwrite(o, "DATA", 4, 1, o->t_file) <= 0)
+    {
+        free(comp_buf);
         return 0;
+    }
 
     write_le48(compressed_size_out, &comp_size_out[0]);
     if (template_fwrite(o, comp_size_out, sizeof(comp_size_out), 1, o->t_file)
         <= 0)
+    {
+        free(comp_buf);
         return 0;
+    }
 
     write_le48(size, &uncomp_size_out[0]);
     if (template_fwrite(o, uncomp_size_out, sizeof(uncomp_size_out), 1, 
                         o->t_file) <= 0)
+    {
+        free(comp_buf);
         return 0;
+    }
     
     if (template_fwrite(o, comp_buf, c_stream.total_out, 1, o->t_file) <= 0)
         return 0;
@@ -717,6 +747,7 @@ static int flush_gzip_chunk(struct libjte_env *o, void *buffer, off_t size)
 #ifdef LIBJTE_WITH_LIBBZ2
 
 /* Compress and flush out a buffer full of template data */
+/* Return 0 on failure, non-zero on success */
 static int flush_bz2_chunk(struct libjte_env *o, void *buffer, off_t size)
 {
     bz_stream c_stream; /* compression stream */
@@ -731,6 +762,9 @@ static int flush_bz2_chunk(struct libjte_env *o, void *buffer, off_t size)
     c_stream.opaque = NULL;
 
     err = BZ2_bzCompressInit(&c_stream, 9, 0, 0);
+    if (err < 0)
+        return 0;
+
     if (NULL == (comp_buf = (char*) malloc(2 * size))) /* Worst case */
         return 0;
     c_stream.next_out = comp_buf;
@@ -739,22 +773,41 @@ static int flush_bz2_chunk(struct libjte_env *o, void *buffer, off_t size)
     c_stream.avail_in = size;
     
     err = BZ2_bzCompress(&c_stream, BZ_FINISH);
+    if (err < 0)
+    {
+        free(comp_buf);
+        return 0;
+    }
     
     compressed_size_out = c_stream.total_out_lo32 + 16;
     err = BZ2_bzCompressEnd(&c_stream);
+    if (err < 0)
+    {
+        free(comp_buf);
+        return 0;
+    }
 
     if (template_fwrite(o, "BZIP", 4, 1, o->t_file) <= 0)
+    {
+        free(comp_buf);
         return 0;
+    }
 
     write_le48(compressed_size_out, &comp_size_out[0]);
     if (template_fwrite(o, comp_size_out, sizeof(comp_size_out), 1, 
                         o->t_file) <= 0)
+    {
+        free(comp_buf);
         return 0;
+    }
 
     write_le48(size, &uncomp_size_out[0]);
     if (template_fwrite(o, uncomp_size_out, sizeof(uncomp_size_out), 1,
                         o->t_file) <= 0)
+    {
+        free(comp_buf);
         return 0;
+    }
     
     if (template_fwrite(o, comp_buf, c_stream.total_out_lo32, 1,
                         o->t_file) <= 0)
