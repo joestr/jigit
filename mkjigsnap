@@ -440,11 +440,19 @@ for KEYWORD in $KEYWORDS; do
     TOTAL_FILES=`wc -l < $TMPFILE`
     echo "  $LISTDONEDATE: Total references for \"$KEYWORD\": $TOTAL_FILES"
 
-    cat $TMPFILE | sort -u $SORT_TMPDIR > $TMPFILE1
+    # sort is prone to running out of space, so bail if it fails. We
+    # don't want to destroy an existing snapshot if we end up with an
+    # empty list of files!
+    sort -u $SORT_TMPDIR $TMPFILE > $TMPFILE1
     SORTDONEDATE=`date -u`
     mv -f $TMPFILE1 $TMPFILE
     NUM_FILES=`wc -l < $TMPFILE`
     echo "  $SORTDONEDATE: Unique references for \"$KEYWORD\": $NUM_FILES"
+
+    if [ $NUM_FILES -lt 5 ] ; then
+        echo "    Only $NUM_FILES for the snapshot? Something is wrong; abort!"
+        exit 1
+    fi
 
     echo "Creating snapshot tree in $DIRNAME:"
     generate_snapshot_tree "$NUM_FILES" "$MIRROR" "$DIRNAME" "$FAILEDFILE" "$IGNOREFILE" "$TMPFILE"
