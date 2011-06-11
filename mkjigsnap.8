@@ -2,24 +2,46 @@
 .SH NAME
 mkjigsnap \- Create a snapshot tree on a jigdo server
 .SH SYNOPSIS
+.\" The single-jigdo command line
 .B mkjigsnap
-\-n \fCD name\fR \-m \fmirror\fR \-o \foutput directory\fR
-\-d \fdirname\fR \-j \fjigdo file\fR \-t \ftemplate file\fR
-\-k \fkeyword\fR
+[OPTIONS]
+<\-d \f snapshot_dir\fR>
+<\-j \f jigdo_file\fR>
+<\-k \f keyword\fR>
+<\-m \f mirror\fR>
+<\-n \f CD_name\fR>
+<\-o \f output_directory\fR>
+<\-t \f template_file\fR>
+.\" The multi-jigdo command line
+.br
+.B mkjigsnap
+[OPTIONS]
+<\-d \f snapshot_dir\fR>
+<\-m \f mirror\fR>
+<\-J \f jigdo_list\fR>
+<\-j \f jigdo_file\fR>
+<\-k \f keyword\fR>
 .SH DESCRIPTION
 .PP
-mkjigsnap will create the directory tree and snapshot needed for jigit
-to work effectively. Once you have created the .template and .jigdo
-files that you want to distribute, run mkjigsnap on a mirror machine
-and it will set things up for you. You need to specify all of the
-options.
+mkjigsnap creates snapshot directories for use by other jigdo
+tools. It can be run in two distinct modes:
+
+.SS "Jigit / single-jigdo mode"
+
+To build a jigit .conf file for a single jigdo file: add the "\-n"
+option with a CD name on the command line and only specify a single
+jigdo to work with using "\-j".
+
+Required arguments for this mode:
 .TP
-\fB\-n CD name\fR
-Specify the output name for jigit (e.g. warty, sarge-i386-1).
-.TP
-\fB\-d dir name\fR
+\fB\-d snapshot_dir\fR
 Specify the output directory name to be used for the snapshot tree
-(e.g. 20041011, rc1).
+(e.g. 20041011, rc1). In single-jigdo mode this will be
+.B relative
+to the output directory.
+.TP
+\fB\-j jigdo_file\fR
+Specify the location of the jigdo file to be used.
 .TP
 \fB\-m mirror\fR
 Specify the location of the mirror containing all the files
@@ -28,22 +50,101 @@ needed. This
 be on the same filesystem as the output directory, as hard links will
 be used to create the snapshot efficiently.
 .TP
-\fB\-o output directory\fR
+\fB\-n CD_name\fR
+Specify the output name of the CD for jigit (e.g. warty, sarge-i386-1).
+.TP
+\fB\-o output_directory\fR
 Specify the output location for the jigdo, template, conf and
 snapshot. This
 .B must
 be on the same filesystem as the mirror, as hard links will be used to
 create the snapshot efficiently.
 .TP
-\fB\-j jigdo file\fR
-Specify the location of the jigdo file to be used.
-.TP
-\fB\-t template file\fR
+\fB\-t template_file\fR
 Specify the location of the template file to be used.
+
+.SS "Multi-jigdo mode"
+
+To build a snapshot tree for (potentially multiple) jigdo files: do
+not specify the "\-n" option, and list as many jigdo files as desired,
+either on the command line using multiple "\-j <jigdo>" options or
+(better) via a file listing them with the "\-J" option.
+
+Required arguments for this mode:
+.TP
+\fB\-d snapshot_dir\fR
+Specify the output directory name to be used for the snapshot tree
+(e.g. 20041011, rc1). 
+.TP
+\fB\-J jigdo_list\fR
+Specify the location of a file listing the jigdo files to be used. May
+be repeated multiple times for multiple list files if desired.
+.TP
+\fB\-j jigdo_file\fR
+Specify the location of the jigdo file to be used. May be repeated
+multiple times for multiple jigdo files, but it's better to use the
+"-J" option to point at a file containing a list of jigdo files
+instead.
 .TP
 \fB\-k keyword\fR
-Specify the "keywords" which are used in the jigdo file (e.g. Debian,
+Specify the "keywords" which are used in the jigdo files (e.g. Debian,
 Non-US, Ubuntu).
+.TP
+\fB\-m mirror\fR
+Specify the location of the mirror containing all the files
+needed. This
+.B must
+be on the same filesystem as the snapshot directory, as hard links
+will be used to create the snapshot efficiently.
+
+.SS "Options"
+
+Optional arguments for both modes:
+.TP
+\fB\-f fail_log\fR
+If any files are required by the specific jigdo files but are not
+available in the mirror, list them in the output file fail_log for
+reference.
+.TP
+\fB\-i ignore_list\fR
+If any files are required by the specific jigdo files but are not
+available in the mirror, list them in the ignore_list file to supress
+errors about them.
+.TP
+\fB\-T temp_dir\fR
+Specify the temporary directory to be used when sorting the list of
+files in snapshot creation. For a large number of jigdo files and file
+references, this may take several gigabytes.
+
+.SH EXAMPLES
+.TP
+mkjigsnap \-o /tmp/mjs-test \-n mjs-test \-m /tmp/mirror \-j
+~/jigdo/update/debian-update-3.0r2.01-i386.jigdo \-t
+~/jigdo/update/debian-update-3.0r2.01-i386.template \-k Debian \-k
+Non-US \-d 20041017
+
+This command is an example of single-jigdo mode, used for Ubuntu jigit
+generation. It creates a single jigit conf file using the supplied
+jigdo/template file pair, looking for jigdo references to files in the
+"Debian" and "Non-US" areas. Output the files into /tmp/mjs-test and
+call them "mjs-test.<ext>", creating a snapshot of the needed files in
+/tmp/mjs-test/20041017 by linking files from /tmp/mirror as needed.
+
+.TP
+mkjigsnap \-m /org/ftp/debian \-J ~/jigdo.list \-T ~/tmp \-k Debian
+\-d /org/jigdo-area/snapshot/Debian \-f ~/mkjigsnap-failed.log \-i
+~/mkjigsnap-ignore.list
+
+This command is an example of multi-jigdo mode, as run to keep
+http://us.cdimage.debian.org/cdimage/snapshot/ up to date. This reads
+in all the jigdo files listed in ~/jigdo.list, building a list of all
+the files referenced in the "Debian" area. It will then attempt to
+build a snapshot tree of all those files under
+/org/jigdo-area/snapshot/Debian by linking from /org/ftp/debian. Any
+files that are missing will be listed into the output "missing" file
+~/mkjigsnap-failed.log for later checking, UNLESS they are already
+listed in the "ignore" file ~/mkjigsnap-ignore.list.
+
 .SH "SEE ALSO"
 \fBjigdo-file\fP(1), \fBjigit\fP(1), \fBjigdump\fP(1) and \fBmkimage\fP(1).
 .SH "COPYRIGHT"
