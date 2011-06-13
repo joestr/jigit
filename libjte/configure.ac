@@ -14,6 +14,7 @@ AC_CANONICAL_TARGET
 LIBBURNIA_SET_FLAGS
 
 AM_INIT_AUTOMAKE([subdir-objects])
+AC_CONFIG_MACRO_DIR([./])
 
 dnl
 dnl if MAJOR or MINOR version changes, be sure to change AC_INIT above to match
@@ -30,8 +31,6 @@ dnl   AGE     = LT_AGE
 dnl
 dnl SONAME of the emerging library is  LT_CURRENT - LT_AGE.
 dnl
-
-AC_CONFIG_MACRO_DIR([./])
 
 dnl 
 dnl Library name = libjte.so.(LT_CURRENT-LT_AGE).(LT_AGE).(LT_REVISION)
