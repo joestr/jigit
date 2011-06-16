@@ -1,5 +1,5 @@
 BINS = jigdump jigit-mkimage jigsum rsyncsum lib
-CFLAGS = -g -Wall -Werror -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE
+CFLAGS = -g -Wall -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE
 #CC = gcc
 
 all: $(BINS)
