@@ -47,7 +47,7 @@
 # Example #2: (multi-jigdo mode, as run to keep
 #              http://us.cdimage.debian.org/cdimage/snapshot/ up to date)
 #
-# mkjigsnap -m /org/ftp/debian -J ~/jigdo.list -T ~/tmp \
+# mkjigsnap -m /org/ftp/debian -J ~/jigdo.list \
 #      -k Debian \
 #      -d /org/jigdo-area/snapshot/Debian \
 #      -f ~/mkjigsnap-failed.log \

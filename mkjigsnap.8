@@ -110,11 +110,6 @@ reference.
 If any files are required by the specific jigdo files but are not
 available in the mirror, list them in the ignore_list file to supress
 errors about them.
-.TP
-\fB\-T temp_dir\fR
-Specify the temporary directory to be used when sorting the list of
-files in snapshot creation. For a large number of jigdo files and file
-references, this may take several gigabytes.
 
 .SH EXAMPLES
 .TP
@@ -131,7 +126,7 @@ call them "mjs-test.<ext>", creating a snapshot of the needed files in
 /tmp/mjs-test/20041017 by linking files from /tmp/mirror as needed.
 
 .TP
-mkjigsnap \-m /org/ftp/debian \-J ~/jigdo.list \-T ~/tmp \-k Debian
+mkjigsnap \-m /org/ftp/debian \-J ~/jigdo.list \-k Debian
 \-d /org/jigdo-area/snapshot/Debian \-f ~/mkjigsnap-failed.log \-i
 ~/mkjigsnap-ignore.list
 
