@@ -77,6 +77,7 @@ my $verbose = 0;
 my $startdate = `date -u`;
 my ($jlistdonedate, $parsedonedate, $snapdonedate);
 my @jigdos;
+my $single_jigdo;
 my @keywords;
 my @mirrors;
 my ($dirname, $failedfile, $ignorefile, $jigdolist, $mirror, $cdname,
@@ -144,6 +145,8 @@ if ($mode eq "single") {
     # In single-jigdo mode, the snapshot directory is relative to the
     # output dir
     $dirname="$outdir/$dirname";
+    # And store the path to the jigdo file for later use
+    $single_jigdo = $jigdos[0];
 } else {
     if (defined($cdname)) {
         die "Output name is meaningless for multi-jigdo mode!\n";
@@ -349,22 +352,25 @@ if ($verbose) {
     print "Reading / parsing jigdo file(s)\n";
 }
 
-open (INJIG, "zcat -f @jigdos |");
-while (<INJIG>) {
-    my $file;
-    chomp;
-    foreach my $keyword (@keywords) {
-        m/^......................=$keyword:(.*)$/ and $file = $1;
-    }
-    if (defined($file)) {
-        $num_unsorted++;
-        if (!exists $ref{$file}) {
-            $num_unique++;
-            $ref{$file} = 1;
+while (@jigdos) {
+    my (@tmpjigdos) = splice (@jigdos, 0, 200);
+    open (INJIG, "zcat -f @tmpjigdos |");
+    while (<INJIG>) {
+        my $file;
+        chomp;
+        foreach my $keyword (@keywords) {
+            m/^......................=$keyword:(.*)$/ and $file = $1;
+        }
+        if (defined($file)) {
+            $num_unsorted++;
+            if (!exists $ref{$file}) {
+                $num_unique++;
+                $ref{$file} = 1;
+            }
         }
     }
+    close(INJIG);
 }
-close(INJIG);
 $parsedonedate = `date -u`;
 
 if ($num_unique < 5) {
@@ -399,17 +405,17 @@ if ($mode eq "single") {
     if ($dryrun) {
         print "DRYRUN: Not creating files in $outdir\n";
     } else {
-        foreach my $jigdo (@jigdos) {
-            my ($gzin, $gzout, $line);
-            $gzin = gzopen($jigdo, "rb") or
-                die "Unable to open jigdo file $jigdo for reading: $!\n";
-            $gzout = gzopen("$outdir/$cdname.jigdo", "wb9") or
-                die "Unable to open new jigdo file $outdir/$cdname.jigdo for writing: $!\n";
-            while ($gzin->gzreadline($line) > 0) {
-                $line =~ s:^Template=.*$:Template=$cdname.template:;
-                $gzout->gzwrite($line);
-            }
+        my ($gzin, $gzout, $line);
+        $gzin = gzopen($single_jigdo, "rb") or
+            die "Unable to open jigdo file $single_jigdo for reading: $!\n";
+        $gzout = gzopen("$outdir/$cdname.jigdo", "wb9") or
+            die "Unable to open new jigdo file $outdir/$cdname.jigdo for writing: $!\n";
+        while ($gzin->gzreadline($line) > 0) {
+            $line =~ s:^Template=.*$:Template=$cdname.template:;
+            $gzout->gzwrite($line);
         }
+        $gzin->close();
+        $gzout->close();
         copy("$template", "$outdir/$cdname.template") or
             die "Failed to copy template file $template: $!\n";
         open (CONF, "> $outdir/$cdname.conf") or
