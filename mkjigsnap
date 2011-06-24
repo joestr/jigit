@@ -363,9 +363,9 @@ while (@jigdos) {
                 $num_unique++;
                 $ref{$file} = 1;
             }
-        }
-        if ( !($num_unsorted % 100000) ) {
-            print "  found $num_unsorted total, $num_unique unique files\n";
+            if ( !($num_unsorted % 100000) ) {
+                print "  found $num_unsorted total, $num_unique unique files\n";
+            }
         }
     }
     close(INJIG);
