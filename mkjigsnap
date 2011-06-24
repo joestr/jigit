@@ -343,14 +343,10 @@ if (defined($jigdolist)) {
 }
 $jlistdonedate = `date -u`;
 
-if ($verbose) {
-    print "Working on $num_jigdos jigdo file(s)\n";
-}
+print "Working on $num_jigdos jigdo file(s)\n";
 # Walk through the list of jigdos, parsing as we go
 my $num_parsed = 0;
-if ($verbose) {
-    print "Reading / parsing jigdo file(s)\n";
-}
+print "Reading / parsing jigdo file(s)\n";
 
 while (@jigdos) {
     my (@tmpjigdos) = splice (@jigdos, 0, 200);
@@ -368,10 +364,14 @@ while (@jigdos) {
                 $ref{$file} = 1;
             }
         }
+        if ( !($num_unsorted % 100000) ) {
+            print "  found $num_unsorted total, $num_unique unique files\n";
+        }
     }
     close(INJIG);
 }
 $parsedonedate = `date -u`;
+print "  found $num_unsorted total, $num_unique unique files in $num_jigdos jigdo files\n";
 
 if ($num_unique < 5) {
     die "Only $num_unique for the snapshot? Something is wrong; abort!\n"
