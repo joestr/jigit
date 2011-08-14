@@ -1100,7 +1100,7 @@ int main(int argc, char **argv)
     logfile = stderr;
     outfile = stdout;
 
-    bzero(&zip_state, sizeof(zip_state));
+    memset(&zip_state, 0, sizeof(zip_state));
 
     while(1)
     {
