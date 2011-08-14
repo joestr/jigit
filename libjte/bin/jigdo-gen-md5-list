@@ -69,7 +69,19 @@ examples:
 EXAMPLES
 }
 
-md5list() {
+SYSTEM=`uname -s`
+case $SYSTEM in
+    Linux|GNU/kFreeBSD)
+        MD5_LIST=md5list_gnu;;
+    FreeBSD)
+        MD5_LIST=md5list_freebsd;;
+    *)
+        echo "System type $SYSTEM unsupported"
+        echo "Abort."
+        exit 1;;
+esac
+
+md5list_gnu() {
 	item="$1"
 	if test $OPT_ABSOLUTE -eq 1; then
         	dn=`dirname "$item"`  # dirname
@@ -84,11 +96,26 @@ md5list() {
 	printf '%32s  %12s  %s\n' "$MD5" "$SIZ" "$item"
 }
 
+md5list_freebsd() {
+	item="$1"
+	if test $OPT_ABSOLUTE -eq 1; then
+        	dn=`dirname "$item"`  # dirname
+		fn=`basename "$item"` # filename
+		od=`pwd -P`           # old dir
+		cd "$dn" || exit 1
+		item=`pwd -P`/"$fn"   # absolute physical file path, avoiding all symlinks
+		cd "$od" || exit 1
+	fi
+	MD5=`md5 -q "$item"`
+	SIZ=`/usr/bin/stat -f %z "$item"`
+	printf '%32s  %12s  %s\n' "$MD5" "$SIZ" "$item"
+}
+
 walkdir() {
 	DR="$1"
 	for item in `find "$DR" -type f`
 	do
-		md5list "$item"
+		$MD5_LIST "$item"
 	done
 }
 
@@ -127,7 +154,6 @@ esac
 
 for i in "$@"
 do
-
 	if test -d "$i" ; then
 		DR="$i"
                 if test $OPT_ABSOLUTE -eq 1; then
@@ -139,7 +165,7 @@ do
 		walkdir "$DR"
 	elif test -f "$i" ; then
 		FL="$i"
-		md5list "$FL"
+		$MD5_LIST "$FL"
 	else
 		usage
 		exit 1
