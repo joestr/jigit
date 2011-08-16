@@ -2,6 +2,7 @@
 
 # Copyright (c) 2010, 2011 George Danchev <danchev@spnet.net>
 # Copyright (c) 2010, 2011 Thomas Schmitt <scdbackup@gmx.net>
+# Copyright (c) 2010, 2011 Steve McIntyre <steve@einval.com>
 # This script is distributed according to the terms of the GNU GPL v2.
 # This should be better rewritten in C at some future point. Ref: pwd code.
 
