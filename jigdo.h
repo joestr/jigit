@@ -43,4 +43,13 @@ typedef enum state_
     ERROR
 } e_state;
 
+typedef struct zs_
+{
+    char   *data_buf;
+    INT64   buf_size;
+    INT64   offset_in_curr_buf;
+    INT64   total_offset;
+} zip_state_t;
+
+int read_data_block(FILE *template_file, FILE *logfile, zip_state_t *zip_state);
 
