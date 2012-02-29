@@ -23,7 +23,6 @@ int main(int argc, char **argv)
     FILE *in_file, *out_file;
     char *in_filename = argv[1];
     char *out_filename = argv[2];
-    int error = 0;
 
     logfile = stderr;
     
@@ -48,9 +47,10 @@ int main(int argc, char **argv)
     }
         
     zip_state.total_offset = 0;
-    while (!error)
+    while (1)
     {
-        error = read_data_block(in_file, logfile, &zip_state);
+        if (read_data_block(in_file, logfile, &zip_state))
+            break;
         fwrite(zip_state.data_buf, zip_state.buf_size, 1, out_file);
         fprintf(stderr, "Wrote %lld bytes\n", zip_state.buf_size);
     }
