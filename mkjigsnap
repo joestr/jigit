@@ -2,7 +2,7 @@
 #
 # mkjigsnap
 #
-# (c) 2004-2011 Steve McIntyre <steve@einval.com>
+# (c) 2004-2012 Steve McIntyre <steve@einval.com>
 #
 # Server-side wrapper; run this on a machine with a mirror to set up
 # the snapshots for jigit / jigdo downloading
@@ -81,18 +81,21 @@ my $single_jigdo;
 my @keywords;
 my @mirrors;
 my ($dirname, $failedfile, $ignorefile, $jigdolist, $mirror, $cdname,
-    $outdir, $tempdir, $template);
+    $outdir, $tempdir, $template, $check_checksums, $checksum_out);
 my $result;
 my $num_jigdos = 0;
 my $num_unsorted = 0;
 my $num_unique = 0;
 my @failed_files;
+my @ck_failed_files;
 my $old_deleted = 0;
 my %ignored_fails;
 my %file_list;
 my %ref;
 
-$result = GetOptions("d=s" => \$dirname,
+$result = GetOptions("c"   => \$check_checksums,
+                     "C=s" => \$checksum_out,
+                     "d=s" => \$dirname,
                      "f=s" => \$failedfile,
                      "i=s" => \$ignorefile,
                      "J=s" => \$jigdolist,
@@ -188,11 +191,11 @@ sub mkdirs {
 }
 
 sub delete_redundant {
-    my $ref;
+    my $link;
 
     if (-f) {
-        $ref = $file_list{$File::Find::name};
-        if (!defined($ref)) {
+        $link = $file_list{$File::Find::name};
+        if (!defined($link)) {
             if ($verbose) {
                 print "delete_redundant($File::Find::name)\n";
             }
@@ -225,6 +228,7 @@ sub generate_snapshot_tree () {
     my $done = 0;
     my $failed = 0;
     my $ignored = 0;
+    my $ck_failed = 0;
 
     $| = 1;
 
@@ -305,12 +309,26 @@ sub generate_snapshot_tree () {
                 }
             }
         }
+        if (-e $outfile && $check_checksums) {
+            my $jigsum = `jigsum $outfile 2>/dev/null`;
+            my $checksum;
+            if ($jigsum =~ m/^(......................)/) {
+                $checksum = $1;
+				if (!($ref{$_} =~ m/\Q$checksum\E/ )) {
+                    print "\nChecksum failure: $_\n";
+                    $ck_failed++;
+                    push (@ck_failed_files, $_);
+                }
+            } else {
+                print "\nFailed to jigsum $_\n";
+            }
+		}
         $done++;
         if ( !($done % 10000) ) {
-            print "$done done, ignored $ignored, failed $failed out of $num_unique\n";
+            print "$done done, ignored $ignored, failed $failed ck_failed $ck_failed out of $num_unique\n";
         }
     }
-    print "  Finished: $done/$num_unique, $failed failed, ignored $ignored\n\n";
+    print "  Finished: $done/$num_unique, $failed failed, $ck_failed ck_failed, ignored $ignored\n\n";
 
     if (defined($failedfile) && ($failed > 0)) {
         print "Writing list of failed files to $failedfile\n";
@@ -352,16 +370,24 @@ while (@jigdos) {
     my (@tmpjigdos) = splice (@jigdos, 0, 200);
     open (INJIG, "zcat -f @tmpjigdos |");
     while (<INJIG>) {
-        my $file;
+        my ($file, $jigsum);
         chomp;
         foreach my $keyword (@keywords) {
-            m/^......................=$keyword:(.*)$/ and $file = $1;
+            if (m/^(......................)=$keyword:(.*)$/) {
+                $jigsum = $1;
+                $file = $2;
+            }
         }
         if (defined($file)) {
             $num_unsorted++;
             if (!exists $ref{$file}) {
                 $num_unique++;
-                $ref{$file} = 1;
+                $ref{$file} = $jigsum;
+            } else {
+                if (!($ref{$file} =~ /\Q$jigsum\E/ )) {
+                    print "  ERROR: $file referenced again with different checksum!\n";
+                    print "    (old " . $ref{$file} . " new $jigsum\n";
+                }
             }
             if ( !($num_unsorted % 100000) ) {
                 print "  found $num_unsorted total, $num_unique unique files\n";
@@ -372,6 +398,14 @@ while (@jigdos) {
 }
 $parsedonedate = `date -u`;
 print "  found $num_unsorted total, $num_unique unique files in $num_jigdos jigdo files\n";
+
+if ($checksum_out) {
+    open(CK_OUT, "> $checksum_out") or die "Can't open $checksum_out for writing: $!\n";
+    foreach $_ (sort (keys %ref)) {
+        print CK_OUT $ref{$_} . "  $_\n";
+    }
+    close(CK_OUT);
+}	
 
 if ($num_unique < 5) {
     die "Only $num_unique for the snapshot? Something is wrong; abort!\n"
