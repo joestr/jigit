@@ -20,12 +20,19 @@
 #include "md5.h"
 
 #define BUF_SIZE 65536
+#define BASE64_MD5_SIZE 30
 
 #ifndef MIN
 #define MIN(x,y)        ( ((x) < (y)) ? (x) : (y))
 #endif
 
-static int md5_file(char *filename)
+enum mode_e
+{
+    MODE_CHECK,
+    MODE_CALC
+};
+
+static int md5_file(char *filename, char *md5, int verbose)
 {
     FILE *file = NULL;
     char buf[BUF_SIZE];
@@ -34,6 +41,8 @@ static int md5_file(char *filename)
     struct mk_MD5Context file_context;
     int done = 0;
     int bytes_read = 0;
+    int error = 0;
+    off_t file_size = -1;
 
     mk_MD5Init(&file_context);
 
@@ -42,7 +51,6 @@ static int md5_file(char *filename)
         file = stdin;
     else
     {
-        fprintf(stderr, "\r %-75.75s", filename);
         file = fopen(filename, "rb");
         if (!file)
         {
@@ -58,6 +66,28 @@ static int md5_file(char *filename)
             return errno;
         }
     }
+
+    if (verbose == 3)
+    {
+        fprintf(stderr, "Checking %s:\r", filename);
+        fflush(stdout);
+    }
+
+    if (verbose == 4)
+    {
+        struct stat st;
+        if (file != stdin)
+        {
+            stat(filename, &st);
+            file_size = st.st_size;
+            fprintf(stderr, "Checking %s: 0 / %lld bytes\r", filename, (long long)file_size);
+        }
+        else
+        {
+            fprintf(stderr, "Checking stdin: 0 bytes\r");
+        }
+        fflush(stdout);
+    }
     
     while (!done)
     {
@@ -71,35 +101,178 @@ static int md5_file(char *filename)
         else
         {
             if (ferror(file) && (EISDIR != errno))
+            {
                 fprintf(stderr, "Unable to read from file %s; error %d\n",
                         filename, errno);
+                error = errno;
+            }
             break;
         }
+        if (verbose == 4)
+        {
+            if (file != stdin)
+                fprintf(stderr, "Checking %s: %lld / %lld bytes\r",
+                        filename, (long long) bytes_read, (long long)file_size);
+            else
+                fprintf(stderr, "Checking stdin: %lld bytes\r", (long long) bytes_read);
+            fflush(stdout);
+        }
     }
+    if (verbose == 4)
+        fprintf(stderr, "\n");
     
     mk_MD5Final(file_md5, &file_context);
     base64_md5 = base64_dump(file_md5, 16);
-    if (file != stdin)
-    {
-        fclose(file);
-        if (bytes_read)
-            printf("%s  %s\n", base64_md5, filename);
-    }
-    else
-        if (bytes_read)
-            printf("%s\n", base64_md5);
+    memcpy(md5, base64_md5, BASE64_MD5_SIZE);
     fflush(stdout);
+    free(base64_md5);
+
+    if (file != stdin)
+        fclose(file);
     
-    return 0;
+    return error;
+}
+
+static int md5_check(char *filename, int verbose)
+{
+    FILE *file = NULL;
+    char *line = NULL;
+    size_t len = 0;
+    ssize_t read;
+    char base64_md5[BASE64_MD5_SIZE];
+    int error = 0;
+
+    /* Check if we're reading from stdin */
+    if (!strcmp("-", filename))
+        file = stdin;
+    else
+    {
+        file = fopen(filename, "rb");
+        if (!file)
+        {
+            switch (errno)
+            {
+                case EACCES:
+                case EISDIR:
+                    break;
+                default:
+                    fprintf(stderr, "Unable to open file %s; error %d\n", filename, errno);
+                    break;
+            }
+            return errno;
+        }
+    }
+
+    while ((read = getline(&line, &len, file)) != -1) {
+        /* Check the format of the line we've read. Should be:
+
+           <22 chars of sum><SPACE><SPACE><filename>
+
+           Look for the spaces and length at least. Use the strings
+           directly in the buffer, add pointers to them in place.
+        */
+        char *this_md5;
+        char *this_filename;
+        int this_error = 0;
+
+        if (read > 24 && line[22] == ' ' && line[23] == ' ')
+        {
+            line[22] = 0;
+            this_md5 = line;
+            this_filename = &line[24];
+            if (line[read - 1] == '\n')
+                line[--read] = '\0';
+            
+            this_error = md5_file(this_filename, base64_md5, verbose);
+            if (this_error)
+            {
+                fprintf(stderr, "Failed to read %s, error %d (%s)\n",
+                        this_filename, this_error, strerror(errno));
+            }
+            else
+            {
+                if (strcmp(base64_md5, this_md5))
+                {
+                    if (verbose > 0)
+                        fprintf(stderr, "FAILED: %s\n", this_filename);
+                    this_error++;
+                }
+                else
+                {
+                    if (verbose > 1)
+                        fprintf(stderr, "OK: %s\n", this_filename);
+                }
+            }                
+        }
+        else
+        {
+            printf("ignoring malformed line %s\n", line);
+        }
+        error += this_error;
+    }
+
+    if (file != stdin)
+        fclose(file);
+
+    return error;
 }
 
 int main(int argc, char **argv)
 {
     int i = 0;
-    
-    for (i = 1; i < argc; i++)
-        (void) md5_file(argv[i]);
+    char base64_md5[BASE64_MD5_SIZE];
+    enum mode_e mode = MODE_CALC;
+    int verbose = 1;
+    int c = -1;
+    int error = 0;
 
-    return 0;
+    while(1)
+    {
+        c = getopt(argc, argv, "cv");
+        if (-1 == c)
+            break;
+
+        switch(c)
+        {
+            case 'v':
+                verbose++;
+                break;
+            case 'c':
+                mode = MODE_CHECK;
+                break;
+        }
+    }
+
+    if (mode == MODE_CALC)
+    {
+        if (argc == optind)
+        {
+            if (!md5_file("-", base64_md5, verbose))
+                printf("%s  %s\n", base64_md5, "-");
+        }
+        else
+        {
+            for (i = optind; i < argc; i++)
+            {
+                if (!md5_file(argv[i], base64_md5, verbose))
+                    printf("%s  %s\n", base64_md5, argv[i]);
+                fflush(stdout);
+            }
+        }
+    }
+    else
+    {
+        if (argc == optind)
+        {
+            error += md5_check("-", verbose);
+        }
+        else
+        {
+            for (i = optind; i < argc; i++)
+                error += md5_check(argv[i], verbose);
+        }
+    }
+    
+    return error;
 }
 
