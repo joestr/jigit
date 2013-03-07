@@ -261,7 +261,7 @@ extern int list_file_in_jigdo(struct libjte_env *o,
     if (o->jtemplate_out == NULL)
         return 0;
 
-    memset(md5, 0, sizeof(md5));
+    memset(md5, 0, 16);
 
     /* Cheaper to check file size first */
     if (size < o->jte_min_size)
