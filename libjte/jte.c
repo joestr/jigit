@@ -88,7 +88,7 @@ static void exit_if_enabled(struct libjte_env *o, int value)
 {
     if (!(o->error_behavior & 2))
         return;
-    libjte_clear_msg_list(0, 1);
+    libjte_clear_msg_list(o, 1);
     exit(value);
 }
 
@@ -156,7 +156,7 @@ int libjte_destroy_path_match_list(struct libjte_env *o, int flag)
 }
 
 /* Build the list of exclusion regexps */
-extern int jte_add_exclude(struct libjte_env *o, char *pattern)
+int jte_add_exclude(struct libjte_env *o, char *pattern)
 {
     int ret;
     
@@ -187,7 +187,7 @@ static int check_exclude_by_name(struct libjte_env *o,
 }
 
 /* Build the list of required inclusion regexps */
-extern int jte_add_include(struct libjte_env *o, char *pattern)
+int jte_add_include(struct libjte_env *o, char *pattern)
 {
     int ret;
     
@@ -251,7 +251,7 @@ static int check_md5_file_match(struct libjte_env *o, char *filename)
       file, bail out with an error.
 
 */
-extern int list_file_in_jigdo(struct libjte_env *o,
+int list_file_in_jigdo(struct libjte_env *o,
             char *filename, off_t size, char **realname, unsigned char md5[16])
 {
     char *matched_rule;
@@ -332,7 +332,7 @@ extern int list_file_in_jigdo(struct libjte_env *o,
 
 /* Add a mapping of pathnames (e.g. Debian=/mirror/debian). We should
    be passed TO=FROM here */
-extern int jte_add_mapping(struct libjte_env *o, char *arg)
+int jte_add_mapping(struct libjte_env *o, char *arg)
 {
     struct path_mapping *new = NULL;
     struct path_mapping *entry = NULL;

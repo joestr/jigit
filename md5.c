@@ -47,17 +47,14 @@
    surprised if they were a performance bottleneck for MD5.  */
 
 static mk_uint32
-getu32 (addr)
-     const unsigned char *addr;
+getu32 (const unsigned char *addr)
 {
 	return (((((unsigned long)addr[3] << 8) | addr[2]) << 8)
 		| addr[1]) << 8 | addr[0];
 }
 
 static void
-putu32 (data, addr)
-     mk_uint32 data;
-     unsigned char *addr;
+putu32 (mk_uint32 data, unsigned char *addr)
 {
 	addr[0] = (unsigned char)data;
 	addr[1] = (unsigned char)(data >> 8);
@@ -70,8 +67,7 @@ putu32 (data, addr)
  * initialization constants.
  */
 void
-mk_MD5Init (ctx)
-     struct mk_MD5Context *ctx;
+mk_MD5Init (struct mk_MD5Context *ctx)
 {
 	ctx->buf[0] = 0x67452301;
 	ctx->buf[1] = 0xefcdab89;
@@ -87,10 +83,7 @@ mk_MD5Init (ctx)
  * of bytes.
  */
 void
-mk_MD5Update (ctx, buf, len)
-     struct mk_MD5Context *ctx;
-     unsigned char const *buf;
-     unsigned len;
+mk_MD5Update(struct mk_MD5Context *ctx, unsigned char const *buf, unsigned len)
 {
 	mk_uint32 t;
 
@@ -138,9 +131,7 @@ mk_MD5Update (ctx, buf, len)
  * 1 0* (64-bit count of bits processed, MSB-first)
  */
 void
-mk_MD5Final (digest, ctx)
-     unsigned char digest[16];
-     struct mk_MD5Context *ctx;
+mk_MD5Final (unsigned char digest[16], struct mk_MD5Context *ctx)
 {
 	unsigned count;
 	unsigned char *p;
@@ -201,9 +192,7 @@ mk_MD5Final (digest, ctx)
  * the data and converts bytes into longwords for this routine.
  */
 void
-mk_MD5Transform (buf, inraw)
-     mk_uint32 buf[4];
-     const unsigned char inraw[64];
+mk_MD5Transform (mk_uint32 buf[4], const unsigned char inraw[64])
 {
 	register mk_uint32 a, b, c, d;
 	mk_uint32 in[16];

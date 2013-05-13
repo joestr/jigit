@@ -15,8 +15,8 @@
 #include "md5.h"
 #include "jigdo.h"
 
-FILE *logfile;
-zip_state_t zip_state;
+static FILE *logfile;
+static zip_state_t zip_state;
 
 int main(int argc, char **argv)
 {

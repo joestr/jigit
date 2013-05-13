@@ -228,7 +228,7 @@ static void *checksum_thread(void *arg)
         pthread_mutex_unlock(&c->done_mutex);
     }
 
-    pthread_exit(0);
+    pthread_exit(NULL);
 }
 #endif
 
@@ -410,7 +410,7 @@ void checksum_final(checksum_context_t *context)
     {
         if (c->algo[i].enabled)
         {
-            void *ret = 0;
+            void *ret = NULL;
             struct algo_context *a = &c->algo[i];
 
             pthread_mutex_lock(&a->start_mutex);

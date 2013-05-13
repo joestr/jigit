@@ -11,9 +11,7 @@
 #include "endian.h"
 
 /* Write a 64-bit quantity out into memory in BIG ENDIAN order */
-void write_be64(in, out)
-    unsigned long long in;
-    unsigned char *out;
+void write_be64(unsigned long long in, unsigned char *out)
 {
     out[0] = (in >> 56) & 0xFF;
     out[1] = (in >> 48) & 0xFF;
@@ -26,8 +24,7 @@ void write_be64(in, out)
 }
 
 /* Read in a 64-bit BIG ENDIAN quantity */
-unsigned long long read_be64(in)
-    unsigned char *in;
+unsigned long long read_be64(unsigned char *in)
 {
     unsigned long long result = 0;
 
@@ -44,9 +41,7 @@ unsigned long long read_be64(in)
 }
 
 /* Write a 64-bit quantity out into memory in LITTLE ENDIAN order */
-void write_le64(in, out)
-    unsigned long long in;
-    unsigned char *out;
+void write_le64(unsigned long long in, unsigned char *out)
 {
     out[0] = in & 0xFF;
     out[1] = (in >> 8) & 0xFF;
@@ -59,8 +54,7 @@ void write_le64(in, out)
 }
 
 /* Read in a 64-bit LITTLE ENDIAN quantity */
-unsigned long long read_le64(in)
-    unsigned char *in;
+unsigned long long read_le64(unsigned char *in)
 {
     unsigned long long result = 0;
 
@@ -77,9 +71,7 @@ unsigned long long read_le64(in)
 }
 
 /* Write a 48-bit quantity out into memory in LITTLE ENDIAN order */
-void write_le48(in, out)
-    unsigned long long in;
-    unsigned char *out;
+void write_le48(unsigned long long in, unsigned char *out)
 {
     out[0] = in & 0xFF;
     out[1] = (in >> 8) & 0xFF;
@@ -90,8 +82,7 @@ void write_le48(in, out)
 }
 
 /* Read in a 48-bit LITTLE ENDIAN quantity */
-unsigned long long read_le48(in)
-    unsigned char *in;
+unsigned long long read_le48(unsigned char *in)
 {
     unsigned long long result = 0;
 
@@ -106,9 +97,7 @@ unsigned long long read_le48(in)
 }
 
 /* Write a 32-bit quantity out into memory in BIG ENDIAN order */
-void write_be32(in, out)
-    unsigned long in;
-    unsigned char *out;
+void write_be32(unsigned long in, unsigned char *out)
 {
     out[0] = (in >> 24) & 0xFF;
     out[1] = (in >> 16) & 0xFF;
@@ -117,8 +106,7 @@ void write_be32(in, out)
 }
 
 /* Read in a 32-bit BIG ENDIAN quantity */
-unsigned long read_be32(in)
-    unsigned char *in;
+unsigned long read_be32(unsigned char * in)
 {
     unsigned long result = 0;
 
@@ -131,9 +119,7 @@ unsigned long read_be32(in)
 }
 
 /* Write a 32-bit quantity out into memory in LITTLE ENDIAN order */
-void write_le32(in, out)
-    unsigned long in;
-    unsigned char *out;
+void write_le32(unsigned long in, unsigned char *out)
 {
     out[0] = in & 0xFF;
     out[1] = (in >> 8) & 0xFF;
@@ -142,8 +128,7 @@ void write_le32(in, out)
 }
 
 /* Read in a 32-bit LITTLE ENDIAN quantity */
-unsigned long read_le32(in)
-    unsigned char *in;
+unsigned long read_le32(unsigned char *in)
 {
     unsigned long result = 0;
 
@@ -156,17 +141,14 @@ unsigned long read_le32(in)
 }
 
 /* Write a 16-bit quantity out into memory in BIG ENDIAN order */
-void write_be16(in, out)
-    unsigned short in;
-    unsigned char *out;
+void write_be16(unsigned short in, unsigned char *out)
 {
     out[0] = (in >> 8) & 0xFF;
     out[1] = in & 0xFF;
 }
     
 /* Read in a 16-bit BIG ENDIAN quantity */
-unsigned short read_be16(in)
-    unsigned char *in;
+unsigned short read_be16(unsigned char *in)
 {
     unsigned short result = 0;
     
@@ -176,17 +158,14 @@ unsigned short read_be16(in)
 }
 
 /* Write a 16-bit quantity out into memory in LITTLE ENDIAN order */
-void write_le16(in, out)
-    unsigned short in;
-    unsigned char *out;
+void write_le16(unsigned short in, unsigned char *out)
 {
     out[0] = in & 0xFF;
     out[1] = in & 0xFF >> 8;
 }
     
 /* Read in a 16-bit LITTLE ENDIAN quantity */
-unsigned short read_le16(in)
-    unsigned char *in;
+unsigned short read_le16(unsigned char *in)
 {
     unsigned short result = 0;
     

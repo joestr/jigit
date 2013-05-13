@@ -85,7 +85,7 @@ static UInt32_t charTable[256] = {
   0xaf551d9a, 0x66222560, 0x059deeca, 0x535f99e2
 };
 
-unsigned long long rsync64(unsigned char *mem, size_t size)
+static unsigned long long rsync64(unsigned char *mem, size_t size)
 {
     UInt32_t a = 0;
     UInt32_t b = 0;

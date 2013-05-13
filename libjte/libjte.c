@@ -121,7 +121,7 @@ int libjte_new(struct libjte_env **jte_handle, int flag)
     o->include_in_jigdo = 0;
     memset(o->message_buffer, 0, sizeof(o->message_buffer));
     o->error_behavior = 1; /* Print to stderr, do not exit but return -1 */
-    o->msg_list = 0;
+    o->msg_list = NULL;
     o->uncomp_buf = NULL;
     o->uncomp_size = 0;
     o->uncomp_buf_used = 0;

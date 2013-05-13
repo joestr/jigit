@@ -28,16 +28,16 @@
 #define MISSING -1
 #define UNKNOWN -2
 
-FILE *logfile = NULL;
-FILE *outfile = NULL;
-FILE *missing_file = NULL;
-long long start_offset = 0;
-long long end_offset = 0;
-int quick = 0;
-int verbose = 0;
-int check_jigdo_header = 1;
-UINT64 out_size = 0;
-char *missing_filename = NULL;
+static FILE *logfile = NULL;
+static FILE *outfile = NULL;
+static FILE *missing_file = NULL;
+static long long start_offset = 0;
+static long long end_offset = 0;
+static int quick = 0;
+static int verbose = 0;
+static int check_jigdo_header = 1;
+static UINT64 out_size = 0;
+static char *missing_filename = NULL;
 
 typedef struct match_list_
 {
@@ -46,8 +46,8 @@ typedef struct match_list_
     char *mirror_path;
 } match_list_t;
 
-match_list_t *match_list_head = NULL;
-match_list_t *match_list_tail = NULL;
+static match_list_t *match_list_head = NULL;
+static match_list_t *match_list_tail = NULL;
 
 typedef struct md5_list_
 {
@@ -57,10 +57,10 @@ typedef struct md5_list_
     char *full_path;
 } md5_list_t;
 
-md5_list_t *md5_list_head = NULL;
-md5_list_t *md5_list_tail = NULL;
+static md5_list_t *md5_list_head = NULL;
+static md5_list_t *md5_list_tail = NULL;
 
-zip_state_t zip_state;
+static zip_state_t zip_state;
 
 /* Grab the file component from a full path */
 static char *file_base_name(char *path)

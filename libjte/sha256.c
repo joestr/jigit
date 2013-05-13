@@ -179,8 +179,7 @@ sha256_process_block (const void *buffer, size_t len, struct sha256_ctx *ctx)
 /* Initialize structure containing state of computation.
    (FIPS 180-2:5.3.2)  */
 void
-sha256_init_ctx (ctx)
-     struct sha256_ctx *ctx;
+sha256_init_ctx (struct sha256_ctx *ctx)
 {
   ctx->H[0] = 0x6a09e667;
   ctx->H[1] = 0xbb67ae85;
@@ -202,9 +201,7 @@ sha256_init_ctx (ctx)
    IMPORTANT: On some systems it is required that RESBUF is correctly
    aligned for a 32 bits value.  */
 void *
-sha256_finish_ctx (ctx, resbuf)
-     struct sha256_ctx *ctx;
-     void *resbuf;
+sha256_finish_ctx (struct sha256_ctx *ctx, void *resbuf)
 {
   /* Take yet unprocessed bytes into account.  */
   uint32_t bytes = ctx->buflen;
@@ -236,10 +233,7 @@ sha256_finish_ctx (ctx, resbuf)
 
 
 void
-sha256_process_bytes (buffer, len, ctx)
-     const void *buffer;
-     size_t len;
-     struct sha256_ctx *ctx;
+sha256_process_bytes (const void *buffer, size_t len, struct sha256_ctx *ctx)
 {
   /* When we already have some bits in our internal buffer concatenate
      both inputs first.  */

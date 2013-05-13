@@ -103,11 +103,10 @@
 #define LIBJTE_DEMO_MAX_FILES 1000
 #define LIBJTE_DEMO_BUFSIZE   4096
 
-struct libjte_env *handle = NULL;
-char *outfile = NULL;
-FILE *fp_out = NULL;
-int filec = 0;
-char *filev[LIBJTE_DEMO_MAX_FILES + 1];
+static struct libjte_env *handle = NULL;
+static char *outfile = NULL;
+static int filec = 0;
+static char *filev[LIBJTE_DEMO_MAX_FILES + 1];
 
 
 static int libjte_demo_setup(int argc, char **argv, int flag)
@@ -175,7 +174,7 @@ usage:;
 }
 
 
-int libjte_demo_write(char *buf, int size, FILE *fp_out)
+static int libjte_demo_write(char *buf, int size, FILE *fp_out)
 {
     int ret;
 
@@ -194,7 +193,7 @@ int libjte_demo_write(char *buf, int size, FILE *fp_out)
 }
 
 
-int libjte_demo_run(int flag)
+static int libjte_demo_run(int flag)
 {
     int ret, i, major, minor, micro, buf_fill;
     FILE *fp_out, *fp_in;
