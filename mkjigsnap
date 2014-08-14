@@ -337,6 +337,7 @@ sub generate_snapshot_tree () {
         open(FAIL_LOG, "> $failedfile") or die "Failed to open $failedfile: $!\n";
 	if ($backref_file) {
 	    open (BACKREF, "> $backref_file") or die "Failed to open $backref_file: $!\n";
+	    print "Writing backref details to $backref_file\n";
 	}
         foreach my $missing (@failed_files) {
             print FAIL_LOG "$missing\n";
