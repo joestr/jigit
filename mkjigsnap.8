@@ -16,6 +16,7 @@ mkjigsnap \- Create a snapshot tree on a jigdo server
 .br
 .B mkjigsnap
 [OPTIONS]
+<\-b \f backref_file\fR>
 <\-d \f snapshot_dir\fR>
 <\-m \f mirror\fR>
 <\-J \f jigdo_list\fR>
@@ -101,6 +102,10 @@ will be used to create the snapshot efficiently.
 
 Optional arguments for both modes:
 .TP
+\fB\-b backref_file\fR
+If using a fail_log, also keep track of which jigdo files correspond
+to each missing file, and output the details in the backref_file.
+.TP
 \fB\-f fail_log\fR
 If any files are required by the specific jigdo files but are not
 available in the mirror, list them in the output file fail_log for
@@ -143,7 +148,7 @@ listed in the "ignore" file ~/mkjigsnap-ignore.list.
 .SH "SEE ALSO"
 \fBjigdo-file\fP(1), \fBjigit\fP(1), \fBjigdump\fP(1) and \fBmkimage\fP(1).
 .SH "COPYRIGHT"
-Copyright 2004 - 2012 Steve McIntyre (steve@einval.com)
+Copyright 2004 - 2014 Steve McIntyre (steve@einval.com)
 .PP
 mkjigsnap may be copied under the terms and conditions of version 2 of
 the GNU General Public License, as published by the Free Software

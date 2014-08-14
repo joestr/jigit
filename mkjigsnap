@@ -2,7 +2,7 @@
 #
 # mkjigsnap
 #
-# (c) 2004-2012 Steve McIntyre <steve@einval.com>
+# (c) 2004-2014 Steve McIntyre <steve@einval.com>
 #
 # Server-side wrapper; run this on a machine with a mirror to set up
 # the snapshots for jigit / jigdo downloading
@@ -81,7 +81,7 @@ my $single_jigdo;
 my @keywords;
 my @mirrors;
 my ($dirname, $failedfile, $ignorefile, $jigdolist, $mirror, $cdname,
-    $outdir, $tempdir, $template, $check_checksums, $checksum_out);
+    $outdir, $tempdir, $template, $check_checksums, $checksum_out, $backref_file);
 my $result;
 my $num_jigdos = 0;
 my $num_unsorted = 0;
@@ -92,8 +92,10 @@ my $old_deleted = 0;
 my %ignored_fails;
 my %file_list;
 my %ref;
+my %jigdo_backref;
 
-$result = GetOptions("c"   => \$check_checksums,
+$result = GetOptions("b=s" => \$backref_file,
+                     "c"   => \$check_checksums,
                      "C=s" => \$checksum_out,
                      "d=s" => \$dirname,
                      "f=s" => \$failedfile,
@@ -333,10 +335,20 @@ sub generate_snapshot_tree () {
     if (defined($failedfile) && ($failed > 0)) {
         print "Writing list of failed files to $failedfile\n";
         open(FAIL_LOG, "> $failedfile") or die "Failed to open $failedfile: $!\n";
+	if ($backref_file) {
+	    open (BACKREF, "> $backref_file") or die "Failed to open $backref_file: $!\n";
+	}
         foreach my $missing (@failed_files) {
             print FAIL_LOG "$missing\n";
-        }
+	    if ($backref_file) {
+		print BACKREF "$missing:\n";
+		print BACKREF $jigdo_backref{$missing};
+	    }
+        }	
         close FAIL_LOG;
+	if ($backref_file) {
+	    close BACKREF;
+	}
     }
 
     # Now walk the tree and delete files that we no longer need
@@ -366,34 +378,41 @@ print "Working on $num_jigdos jigdo file(s)\n";
 my $num_parsed = 0;
 print "Reading / parsing jigdo file(s)\n";
 
-while (@jigdos) {
-    my (@tmpjigdos) = splice (@jigdos, 0, 200);
-    open (INJIG, "zcat -f @tmpjigdos |");
+foreach my $injig (sort @jigdos) {
+    open (INJIG, "zcat -f $injig |");
+    $num_parsed++;
     while (<INJIG>) {
-        my ($file, $jigsum);
-        chomp;
-        foreach my $keyword (@keywords) {
-            if (m/^(......................)=$keyword:(.*)$/) {
-                $jigsum = $1;
-                $file = $2;
-                $file =~ s?^/??;
-            }
-        }
-        if (defined($file)) {
-            $num_unsorted++;
-            if (!exists $ref{$file}) {
-                $num_unique++;
-                $ref{$file} = $jigsum;
-            } else {
-                if (!($ref{$file} =~ /\Q$jigsum\E/ )) {
-                    print "  ERROR: $file referenced again with different checksum!\n";
-                    print "    (old " . $ref{$file} . " new $jigsum\n";
-                }
-            }
-            if ( !($num_unsorted % 100000) ) {
-                print "  found $num_unsorted total, $num_unique unique files\n";
-            }
-        }
+	my ($file, $jigsum);
+	chomp;
+	foreach my $keyword (@keywords) {
+	    if (m/^(......................)=$keyword:(.*)$/) {
+		$jigsum = $1;
+		$file = $2;
+		$file =~ s?^/??;
+	    }
+	}
+	if (defined($file)) {
+	    $num_unsorted++;
+	    if (!exists $ref{$file}) {
+		$num_unique++;
+		$ref{$file} = $jigsum;
+	    } else {
+		if (!($ref{$file} =~ /\Q$jigsum\E/ )) {
+		    print "  ERROR: $file referenced again with different checksum!\n";
+		    print "    (old " . $ref{$file} . " new $jigsum\n";
+		}
+	    }
+	    if ($backref_file) {
+		if (!defined $jigdo_backref{$file}) {
+		    $jigdo_backref{$file} = " $injig\n";
+		} else {
+		    $jigdo_backref{$file} .= " $injig\n";
+		}
+	    }
+	    if ( !($num_unsorted % 100000) ) {
+		print "  found $num_unsorted total, $num_unique unique files, $num_parsed / $num_jigdos jigdo files ($injig)\n";
+	    }
+	}
     }
     close(INJIG);
 }
