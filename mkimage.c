@@ -422,7 +422,7 @@ static int add_file_entry(char *jigdo_entry)
 static int parse_jigdo_file(char *filename)
 {
     char buf[2048];
-    gzFile *file = NULL;
+    gzFile file = NULL;
     char *ret = NULL;
     int error = 0;
     int num_files = 0;
