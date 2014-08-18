@@ -1,3 +1,16 @@
+Version 1.20 (2014-08-18)
+
+ * mkjigsnap:
+   + Add support for tracking back-references, i.e. which jigdo did a
+     particular file come from.
+   * Add support for verifying checksums
+ * jigsum:
+   * Add support for verifying checksums, similar to md5sum etc.
+ * Misc code cleanups:
+   * warnings
+   * sparse errors
+   * Fix memset calls to zero the right amount of memory
+
 Version 1.19 (2011-06-16)
 
  * Improved error-handling in mkimage and libjte.
