@@ -1,5 +1,5 @@
-BINS = jigdump jigit-mkimage jigsum rsyncsum lib extract-data
-CFLAGS += -g -Wall -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE
+BINS = jigdump jigit-mkimage jigsum rsyncsum lib extract-data parallel-sums
+CFLAGS += -g -Wall -pthread -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE
 #CC = gcc
 
 all: $(BINS)
@@ -24,6 +24,9 @@ lib: libjte/Makefile
 
 libjte/Makefile:
 	cd libjte && ./configure
+
+parallel-sums: parallel-sums.o libjte/Makefile
+	$(CC) -pthread $(LDFLAGS) -o $@ parallel-sums.o libjte/libjte_libjte_la-checksum.o libjte/libjte_libjte_la-md5.o libjte/libjte_libjte_la-sha*.o -lpthread
 
 clean:
 	rm -f *.o $(BINS) *~ build-stamp
