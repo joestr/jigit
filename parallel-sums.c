@@ -3,7 +3,7 @@
  *
  * Calculate and print various checksums in parallel
  *
- * Copyright (c) 2015 Steve McIntyre <steve@einval.com>
+ * Copyright (c) 2015 - 2019 Steve McIntyre <steve@einval.com>
  *
  * GPL v2 - see COPYING
  */
@@ -19,6 +19,8 @@
 #include <getopt.h>
 #include <pthread.h>
 #include <sys/time.h>
+
+static char *progname = "parallel-sums";
 
 #define THREADED_CHECKSUMS
 #include "libjte/checksum.h"
@@ -65,7 +67,7 @@ TIME total_proc = 0;
 unsigned long long bytes_read;
 unsigned long long bytes_proc;
 static struct state state[NUM_CHECKSUMS];
-static struct option opts[NUM_CHECKSUMS + 1];
+static struct option opts[NUM_CHECKSUMS + 2];
 int checksums_mask = 0;
 
 static void get_time(TIME *newtime)
@@ -157,6 +159,25 @@ void *processor(checksum_context_t *ctx)
     }
 }
 
+void usage()
+{
+    int i = 0;
+
+    printf("%s\n\n", progname);
+    printf("Usage: parallel-sums <--algo1 ALGO1FILE> [--algo2 ALGO2FILE ... -algo2N algoNfile] \\\n");
+    printf("       <file1> [file2 ... fileN]\n\n");
+
+    printf("Calculate checksums for a set of files (e.g. md5sum, sha1sum) in parallel,\n");
+    printf("reducing repeated file I/O.\n");
+    printf("This version of %s is compiled with support for the following checksum algorithms:\n", progname);
+    for (i = 0; i < NUM_CHECKSUMS; i++)
+    {
+        struct checksum_info *info = checksum_information(i);
+        printf("  %s (--%s)\n", info->name, info->prog);
+    }
+    exit (0);
+}
+
 int main(int argc, char **argv)
 {
     int i = 0;
@@ -173,6 +194,13 @@ int main(int argc, char **argv)
 	opts[i].flag = NULL;
 	opts[i].val = i;
     }
+
+    opts[i].name = "help";
+    opts[i].has_arg = no_argument;
+    opts[i].flag = NULL;
+    opts[i].val = i;
+    i++;
+
     opts[i].name = NULL;
     opts[i].has_arg = 0;
     opts[i].flag = NULL;
@@ -182,10 +210,13 @@ int main(int argc, char **argv)
     {
         int option_index = 0;
         c = getopt_long(argc, argv, "", opts, &option_index);
-        if (c == -1)
+        if (c == -1 || c == '?')
         {
             break;
         }
+	if (c == 4) {
+            usage();
+	}
 	state[c].desired = 1;
 	state[c].out_filename = strdup(optarg);
 	state[c].out_stream = NULL;
@@ -193,9 +224,18 @@ int main(int argc, char **argv)
 	checksums_mask |= (1 << c);
     }
 
-    if ( (optind >= argc) || (num_desired == 0))
+    if (0 == num_desired)
+    {
+        fprintf(stderr, "No checksum algorithms requested, bailing...\n");
+	return 0;
+    }
+
+    if (optind >= argc)
+    {
         /* nothing to do! */
+        fprintf(stderr, "No files listed, nothing to do\n");
         return 0;
+    }
 
     /* else - we have to work to do! */
 
