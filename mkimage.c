@@ -409,7 +409,7 @@ static int add_file_entry(char *jigdo_entry)
                 add_md5_entry(MISSING, base64_md5, jigdo_name);
             else
             {
-                fprintf(logfile, "Unable to find a file to match %s\n", file_name);
+                fprintf(logfile, "Unable to find a file to match %s\n", jigdo_name);
                 fprintf(logfile, "Abort!\n");
                 exit (ENOENT);
             }
