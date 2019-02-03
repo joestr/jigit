@@ -1,0 +1,46 @@
+.TH PARALLEL-SUMS 1 "January 2019" "Jigit jigdo tools"
+.SH NAME
+parallel-sums \- Calculate checksums in parallel using multiple algorithms
+.SH SYNOPSIS
+.B parallel-sums
+\-\-algo1 \fBALGO1FILE\fR
+[\-\-algo2 \fBALGO2FILE\fR ... \-\-algoN \fBALGONFILE\fR]
+file1 [file2 ... fileN
+.PP
+.B parallel-sums
+\-\-help
+.SH DESCRIPTION
+.PP
+parallel-sums is designed to make it faster and easier to create
+checksum files using multiple algorithms. It will only read the data
+from each input file once, spawning a new thread per checksum
+algorithm requested and running calculations in parallel.
+.PP
+Specify the list of desired checksum algorithms along with the output
+filename for each checksum type, then pass the list of files.
+.PP
+The output is intended to be 100% compatible with the file formats of
+existing tools like md5sum, sha256sum etc.
+.TP
+\fB\-\-algo ALGOSUMS\fR
+Checksum all input files using the algorithm "algo" and output the
+checksums in the file ALGOSUMS.
+.TP
+\fB\-\-help\fR
+Print usage information and list the checksum algorithms supported.
+.SH "EXAMPLES"
+.TP
+\fBparallel-sums \-\-md5sum MD5SUMS \-\-sha256sum SHA256SUMS *.iso\fR
+Read all files matching the pattern *.iso. In parallel, checksum each
+file using the MD5 algorithm (writing to "MD5SUMS") and checksum each
+file using the SHA256 algorithm (writing to "SHA256SUMS").
+.SH "SEE ALSO"
+\fBmd5sum\fP(1), \fBsha1sum\fP(1), \fBsha256sum\fP(1) and \fBsha512sum\fP(1).
+.SH "COPYRIGHT"
+Copyright 2019 Steve McIntyre (steve@einval.com)
+.PP
+parallel-sums may be copied under the terms and conditions of version
+2 of the GNU General Public License, as published by the Free Software
+Foundation (Cambridge, MA, USA).
+.SH "AUTHOR"
+Written by Steve McIntyre (steve@einval.com)
