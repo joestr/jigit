@@ -1,0 +1,6 @@
+*~
+*.o
+*.lo
+*.log
+*.status
+core
