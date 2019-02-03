@@ -1,23 +1,23 @@
-.TH MKIMAGE 1 "September 2004" "Jigit jigdo tools"
+.TH JIGIT-MKIMAGE 1 "January 2019" "Jigit jigdo tools"
 .SH NAME
-mkimage \- Create an ISO image from jigdo files
+jigit-mkimage \- Create an ISO image from jigdo files
 .SH SYNOPSIS
-.B mkimage
-\-j \fjigdo\fR \-t \ftemplate\fR
+.B jigit-mkimage
+\fI\-j jigdo\fR \fI\-t template\fR
 [\fIoptions\fR]... 
 .PP
-.B mkimage
-\-t \ftemplate\fR \-z
+.B jigit-mkimage
+\fI\-t template\fR \-z
 [\fIoptions\fR]... 
 .PP
-.B mkimage
-\-f \fmd5\-list\fR -t \ftemplate\fR \-M \fmissing\-list\fR
+.B jigit-mkimage
+\fI\-f md5\-list\fR \fI\-t template\fR \fI\-M missing\-list\fR
 [\fIoptions\fR]... 
 .SH DESCRIPTION
 .PP
-mkimage knows how to parse a jigdo template file, commonly used when
-creating Debian CDs and DVDs. It can be used to actually convert a
-template file and associated files into an ISO image (hence the name
+jigit-mkimage knows how to parse a jigdo template file, commonly used
+when creating Debian CDs and DVDs. It can be used to actually convert
+a template file and associated files into an ISO image (hence the name
 mkimage), or with some command line options it will output useful
 information about the template file instead.
 .TP
