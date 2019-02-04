@@ -1,3 +1,12 @@
+Version 1.21 (2019-02-04)
+
+ * parallel-sums:
+   + New utility for calculating checksums in parallel
+ * Misc code cleanups
+ * Misc man page cleanups
+ * jigit-mkimage:
+   + Print missing file names correctly
+
 Version 1.20 (2014-08-18)
 
  * mkjigsnap:
