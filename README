@@ -1,7 +1,7 @@
-README for JTE 1.20
+README for JTE 1.21
 
 Steve McIntyre <steve@einval.com>
-17 June 2014
+04 February 2019
 
 License - GPL v2+. See the file COPYING for more details.
 
@@ -65,6 +65,10 @@ aborted downloads.
 
 jigit is a first attempt at a user-friendly wrapper for jigit-mkimage
 on a user's machine.
+
+parallel-sums is a simple extra utility to generate checksums quickly
+and efficiently, reading file data only once and calculating checksums
+using multiple algorithms in parallel.
 
 ----------------------------------------------------------------------
 
