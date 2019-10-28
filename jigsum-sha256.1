@@ -1,0 +1,31 @@
+.TH JIGSUM-SHA256 1 "February 2019" "Jigit jigdo tools"
+.SH NAME
+jigsum-sha256 \- List SHA256 sums of files in jigdo's base64-like format
+.SH SYNOPSIS
+.B jigsum-sha256
+[\fIfiles\fR]... 
+.SH DESCRIPTION
+.PP
+jigsum-sha256 will read in all the files specified and write the
+SHA256sum of each file to stdout (similarly to the sha256sum program),
+but in the jigdo base64-like format rather than the normal hexadecimal
+format.
+.SH "EXAMPLES"
+.TP
+$ jigsum-sha256 *.c
+.P
+6b1p4RxnXXvIKBZXxxvMgIlX76TWk2sKPkPQRzrcqDM  endian.c
+.P
+4TAt89kzHPPPb31RIkpn7cJojhJDX8qGcYAhvk2p_MM  extract-data.c
+.P
+zV4oGNmpSOQvB4yfUd82WhIQW8xFbUoE-IUMCwsOiK4  jig-base64.c
+.SH "SEE ALSO"
+\fBjigdo-file\fP(1), \fBjigit\fP(1), \fBjigdump\fP(1) and \fBmkimage\fP(1).
+.SH "COPYRIGHT"
+Copyright 2004-2019 Steve McIntyre (steve@einval.com)
+.PP
+jigsum-sha256 may be copied under the terms and conditions of version 2
+of the GNU General Public License, as published by the Free
+Software Foundation (Cambridge, MA, USA).
+.SH "AUTHOR"
+Written by Steve McIntyre (steve@einval.com)

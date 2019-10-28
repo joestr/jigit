@@ -1,6 +1,8 @@
-BINS = jigdump jigit-mkimage jigsum rsyncsum lib extract-data parallel-sums
-CFLAGS += -g -Wall -pthread -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE
+BINS = jigdump jigit-mkimage jigsum jigsum-sha256 rsyncsum lib extract-data parallel-sums
+CFLAGS += -g -Wall -I libjte -pthread -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE
 #CC = gcc
+
+CKSUM_OBJS = libjte/libjte_libjte_la-checksum.o libjte/libjte_libjte_la-md5.o libjte/libjte_libjte_la-sha1.o libjte/libjte_libjte_la-sha256.o libjte/libjte_libjte_la-sha512.o
 
 all: $(BINS)
 
@@ -10,7 +12,10 @@ jigit-mkimage: mkimage.o endian.o md5.o uncompress.o jig-base64.o
 extract-data: extract-data.o endian.o uncompress.o
 	$(CC) $(LDFLAGS) -o $@ $+ -lz -lbz2
 
-jigsum: jigsum.o md5.o
+jigsum: jigsum.o md5.o jig-base64.o
+	$(CC) $(LDFLAGS) -o $@ $+
+
+jigsum-sha256: jigsum-sha256.o libjte/libjte_libjte_la-sha256.o jig-base64.o
 	$(CC) $(LDFLAGS) -o $@ $+
 
 rsyncsum: rsync.o md5.o jig-base64.o
@@ -25,8 +30,10 @@ lib: libjte/Makefile
 libjte/Makefile:
 	cd libjte && ./configure
 
-parallel-sums: parallel-sums.o libjte/Makefile
-	$(CC) -pthread $(LDFLAGS) -o $@ parallel-sums.o libjte/libjte_libjte_la-checksum.o libjte/libjte_libjte_la-md5.o libjte/libjte_libjte_la-sha*.o -lpthread
+$(CKSUM_OBJS): lib
+
+parallel-sums: parallel-sums.o $(CKSUM_OBJS)
+	$(CC) -pthread $(LDFLAGS) -o $@ $+ -lpthread
 
 clean:
 	rm -f *.o $(BINS) *~ build-stamp
