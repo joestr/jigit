@@ -4,7 +4,7 @@ CFLAGS += -g -Wall -pthread -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEF
 
 all: $(BINS)
 
-jigit-mkimage: mkimage.o endian.o md5.o uncompress.o
+jigit-mkimage: mkimage.o endian.o md5.o uncompress.o jig-base64.o
 	$(CC) $(LDFLAGS) -o $@ $+ -lz -lbz2
 
 extract-data: extract-data.o endian.o uncompress.o
@@ -13,10 +13,10 @@ extract-data: extract-data.o endian.o uncompress.o
 jigsum: jigsum.o md5.o
 	$(CC) $(LDFLAGS) -o $@ $+
 
-rsyncsum: rsync.o md5.o
+rsyncsum: rsync.o md5.o jig-base64.o
 	$(CC) $(LDFLAGS) -o $@ $+
 
-jigdump: jigdump.o md5.o
+jigdump: jigdump.o md5.o jig-base64.o
 	$(CC) $(LDFLAGS) -o $@ $+
 
 lib: libjte/Makefile

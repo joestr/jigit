@@ -17,10 +17,16 @@
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include "jig-base64.h"
 #include "md5.h"
 
 #define BUF_SIZE 65536
-#define BASE64_MD5_SIZE 30
+
+/* MD5 is 128-bit! */
+#define CKSUM_BITS 128
+#define CKSUM_BYTES (CKSUM_BITS / 8)
+#define ROUND_UP(N, S) ((((N) + (S) - 1) / (S)) * (S))
+#define BASE64_CKSUM_BYTES ((ROUND_UP (CKSUM_BITS, 6)) / 6)
 
 #ifndef MIN
 #define MIN(x,y)        ( ((x) < (y)) ? (x) : (y))

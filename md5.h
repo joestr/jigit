@@ -23,6 +23,4 @@ void mk_MD5Final (unsigned char digest[16],
 			  struct mk_MD5Context *context);
 void mk_MD5Transform (mk_uint32 buf[4], const unsigned char in[64]);
 
-char *base64_dump(unsigned char *buf, size_t buf_size);
-
 #endif /* !MD5_H */

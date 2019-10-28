@@ -19,6 +19,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include "jig-base64.h"
 #include "md5.h"
 #include "jigdo.h"
 

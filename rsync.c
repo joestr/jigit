@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <ctype.h>
+#include "jig-base64.h"
 #include "md5.h"
 
 typedef unsigned long UInt32_t;

@@ -22,6 +22,7 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include "endian.h"
+#include "jig-base64.h"
 #include "md5.h"
 #include "jigdo.h"
 
