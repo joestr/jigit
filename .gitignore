@@ -4,3 +4,10 @@
 *.log
 *.status
 core
+extract-data
+jigdump
+jigit-mkimage
+jigsum
+jigsum-sha256
+parallel-sums
+rsyncsum
