@@ -6,12 +6,14 @@
 # This script is distributed according to the terms of the GNU GPL v2.
 # This should be better rewritten in C at some future point. Ref: pwd code.
 
-# Create a list of MD5sums encoded in hexidecimal format and print to standard output
+# Create a list of checksums encoded in hexidecimal format and print to standard output
 
 # Format Description
 # A line in the emerging file is to be composed as follows:
 #
 # The MD5 checksum of the file content must be encoded in 32 hex digits
+# [0-9afAF], or
+# The SHA256 checksum of the file content must be encoded in 64 hex digits
 # [0-9afAF]
 #
 # Next come two blanks.
@@ -38,14 +40,14 @@
 # text, like "Debian:".
 
 # A simple strategy to cope with this is to write absolute paths into the
-# .md5 file, and to use matching absolute paths in the -jigdo-map
+# output checksum file, and to use matching absolute paths in the -jigdo-map
 # directives. Keep in mind that mapping is purely literal. Symbolic links
 # are neither resolved nor can they confuse the mapping.
 
 set -e
 
-SELF=jigdo-gen-md5-list
-VER=0.1
+SELF=jigdo-gen-checksum-list
+VER=0.2
 
 OPT_ABSOLUTE=1
 
@@ -57,6 +59,8 @@ usage: $SELF [option] DIR FILE ...
  -v, --version          print version
  -h, --help             print help
  -e, --examples         print examples
+ -c, --checksum-algo	speciify checksum algorithm.
+                        Valid options are md5 (default) and sha256
 USAGE
 }
 
@@ -69,18 +73,6 @@ examples:
  find . -exec $SELF '{}' ';'
 EXAMPLES
 }
-
-SYSTEM=`uname -s`
-case $SYSTEM in
-    Linux|GNU/kFreeBSD)
-        MD5_LIST=md5list_gnu;;
-    FreeBSD)
-        MD5_LIST=md5list_freebsd;;
-    *)
-        echo "System type $SYSTEM unsupported"
-        echo "Abort."
-        exit 1;;
-esac
 
 md5list_gnu() {
     item="$1"
@@ -95,6 +87,21 @@ md5list_gnu() {
     MD5=`md5sum "$item" | awk '{print $1}'`
     SIZ=`/usr/bin/stat -c %s "$item"`
     printf '%32s  %12s  %s\n' "$MD5" "$SIZ" "$item"
+}
+
+sha256list_gnu() {
+    item="$1"
+    if [ $OPT_ABSOLUTE -eq 1 ] ; then
+        dn=`dirname "$item"`  # dirname
+        fn=`basename "$item"` # filename
+        od=`pwd -P`           # old dir
+        cd "$dn" || exit 1
+        item=`pwd -P`/"$fn"   # absolute physical file path, avoiding all symlinks
+        cd "$od" || exit 1
+    fi
+    SHA256=`sha256sum "$item" | awk '{print $1}'`
+    SIZ=`/usr/bin/stat -c %s "$item"`
+    printf '%64s  %12s  %s\n' "$SHA256" "$SIZ" "$item"
 }
 
 md5list_freebsd() {
@@ -112,10 +119,25 @@ md5list_freebsd() {
     printf '%32s  %12s  %s\n' "$MD5" "$SIZ" "$item"
 }
 
+sha256list_freebsd() {
+    item="$1"
+    if [ $OPT_ABSOLUTE -eq 1 ] ; then
+        dn=`dirname "$item"`  # dirname
+        fn=`basename "$item"` # filename
+        od=`pwd -P`           # old dir
+        cd "$dn" || exit 1
+        item=`pwd -P`/"$fn"   # absolute physical file path, avoiding all symlinks
+        cd "$od" || exit 1
+    fi
+    SHA256=`sha256 -q "$item"`
+    SIZ=`/usr/bin/stat -f %z "$item"`
+    printf '%64s  %12s  %s\n' "$SHA256" "$SIZ" "$item"
+}
+
 walkdir() {
     DR="$1"
     for item in `find "$DR" -type f` ; do
-        $MD5_LIST "$item"
+        $CHECKSUM_LIST "$item"
     done
 }
 
@@ -126,6 +148,8 @@ if [ "$1" = "" ] ; then
     exit 1
 fi
 
+OPT_ALGO="md5"
+
 case "$1" in
     --make-absolute|-a)
         OPT_ABSOLUTE=1;
@@ -133,6 +157,11 @@ case "$1" in
         ;;
     --keep-literal|-l)
         OPT_ABSOLUTE=0;
+        shift;
+        ;;
+    --checksum-algo|-c)
+        OPT_ALGO=$2;
+        shift;
         shift;
         ;;
     --version|-v)
@@ -152,6 +181,34 @@ case "$1" in
 #       ;;
 esac
 
+if [ "$OPT_ALGO" != "md5" ] && [ "$OPT_ALGO" != "sha256" ] ; then
+    echo "Unrecognised checksum algorithm \"$OPT_ALGO\""
+    echo "Allowed values are \"md5\" and \"sha256\"";
+    exit 1
+fi
+
+SYSTEM=`uname -s`
+case $SYSTEM in
+    Linux|GNU/kFreeBSD)
+	case $OPT_ALGO in
+	    md5)
+		CHECKSUM_LIST=md5list_gnu;;
+	    sha256)
+		CHECKSUM_LIST=sha256list_gnu;;
+	esac;;
+    FreeBSD)
+	case $OPT_ALGO in
+	    md5)
+		CHECKSUM_LIST=md5list_freebsd;;
+	    sha256)
+		CHECKSUM_LIST=sha256list_freebsd;;
+	esac;;
+    *)
+        echo "System type $SYSTEM unsupported"
+        echo "Abort."
+        exit 1;;
+esac
+
 for i in "$@" ; do
     if [ -d "$i" ] ; then
         DR="$i"
@@ -164,7 +221,7 @@ for i in "$@" ; do
         walkdir "$DR"
     elif [ -f "$i" ] ; then
         FL="$i"
-        $MD5_LIST "$FL"
+        $CHECKSUM_LIST "$FL"
     else
         usage
         exit 1
