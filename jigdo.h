@@ -14,9 +14,11 @@
 #define COMP_BZIP2 2
 
 /* Block types within the template file */
-#define BLOCK_DATA    2
-#define BLOCK_IMAGE   5
-#define BLOCK_MATCH   6
+#define BLOCK_DATA         2
+#define BLOCK_IMAGE_MD5    5
+#define BLOCK_MATCH_MD5    6
+#define BLOCK_IMAGE_SHA256 8
+#define BLOCK_MATCH_SHA256 9
 
 /* Useful types and macros */
 typedef long long INT64;
@@ -39,6 +41,7 @@ typedef enum state_
     IN_DATA,
     IN_DESC,
     DUMP_DESC,
+    DUMP_DESC_PTR,
     DONE,
     ERROR
 } e_state;
