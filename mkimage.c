@@ -1217,8 +1217,14 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
                     written_length += read_length;
                 }
                 break;
+            case BLOCK_IMAGE_MD5:
+                template_offset += 27;
+                break;
+            case BLOCK_IMAGE_SHA256:
+                template_offset += 43;
+                break;
             default:
-                fprintf(logfile, "Unknown block type %d!\n", buf[0]);
+                fprintf(logfile, "Unknown block type %d, offset %ld\n", bufptr[0], bufptr - buf);
                 fclose(file);
                 return EINVAL;
         }
