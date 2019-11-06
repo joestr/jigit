@@ -969,7 +969,6 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
     INT64 written_length = 0;
     INT64 output_offset = 0;
     INT64 desc_size = 0;
-    INT64 image_size = 0;
     size_t bytes_read = 0;
     size_t total_read = 0;
     int i = 0;
@@ -1066,19 +1065,19 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
                 bufptr += 47;
                 break;
             case BLOCK_IMAGE_MD5:
-                image_size = read_le48((unsigned char *)&bufptr[1]);
+                out_size = read_le48((unsigned char *)&bufptr[1]);
                 memcpy(image_md5sum_from_tmpl, (unsigned char*)&bufptr[7], MD5_BYTES);
 		image_md5_valid = 1;
                 bufptr += 27;
                 break;
             case BLOCK_IMAGE_SHA256:
-                image_size = read_le48((unsigned char *)&bufptr[1]);
+                out_size = read_le48((unsigned char *)&bufptr[1]);
                 memcpy(image_sha256sum_from_tmpl, (unsigned char*)&bufptr[7], SHA256_BYTES);
 		image_sha256_valid = 1;
                 bufptr += 43;
                 break;
             default:
-                fprintf(logfile, "Unknown block type %d!\n", buf[0]);
+                fprintf(logfile, "Unknown block type %d, offset %ld\n", bufptr[0], bufptr - buf);
                 fclose(file);
                 free(buf);
                 return EINVAL;
@@ -1097,7 +1096,7 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
     {
         fclose(file);
 	free(buf);
-        printf("%lld\n", image_size);
+        printf("%lld\n", out_size);
         return 0;
     }
 
@@ -1112,12 +1111,12 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
         }
         if (image_sha256_valid)
         {
-            fprintf(logfile, "Image SHA256 should be    ");
+            fprintf(logfile, "Image SHA256 should be ");
             for (i = 0; i < SHA256_BYTES; i++)
                 fprintf(logfile, "%2.2x", image_sha256sum_from_tmpl[i]);
             fprintf(logfile, "\n");
         }
-        fprintf(logfile, "Image size should be   %lld bytes\n", image_size);
+        fprintf(logfile, "Image size should be   %lld bytes\n", out_size);
     }
 
     if (!quick)
@@ -1203,7 +1202,7 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
                 }
                 break;
             case BLOCK_MATCH_SHA256:
-                template_offset += 31;
+                template_offset += 47;
                 if ((output_offset + extent_size) >= start_offset)
                 {
                     error = parse_file_block_sha256(skip, read_length, extent_size, (unsigned char *)&bufptr[15],
@@ -1264,7 +1263,7 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
             if (image_sha256_valid)
             {
                 sha256_finish_ctx(&template_sha256_context, image_sha256sum);
-		fprintf(logfile, "Output image SHA256 is    ");
+		fprintf(logfile, "Output image SHA256 is ");
 		for (i = 0; i < SHA256_BYTES; i++)
                     fprintf(logfile, "%2.2x", image_sha256sum[i]);
 		fprintf(logfile, "\n");
