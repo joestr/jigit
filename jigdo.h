@@ -3,7 +3,7 @@
  *
  * Common prototypes/macros/definitions
  *
- * Copyright (c) 2007 Steve McIntyre <steve@einval.com>
+ * Copyright (c) 2007-2019 Steve McIntyre <steve@einval.com>
  *
  * GPL v2 - see COPYING
  */

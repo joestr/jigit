@@ -1,3 +1,7 @@
+Version 1.22 (2019-11-05)
+
+ * Add support for SHA256 checksums
+
 Version 1.21 (2019-02-04)
 
  * parallel-sums:

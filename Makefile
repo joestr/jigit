@@ -6,7 +6,7 @@ CKSUM_OBJS = libjte/libjte_libjte_la-checksum.o libjte/libjte_libjte_la-md5.o li
 
 all: $(BINS)
 
-jigit-mkimage: mkimage.o endian.o md5.o uncompress.o jig-base64.o
+jigit-mkimage: mkimage.o endian.o md5.o libjte/libjte_libjte_la-sha256.o uncompress.o jig-base64.o
 	$(CC) $(LDFLAGS) -o $@ $+ -lz -lbz2
 
 extract-data: extract-data.o endian.o uncompress.o

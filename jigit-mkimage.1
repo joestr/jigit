@@ -1,4 +1,4 @@
-.TH JIGIT-MKIMAGE 1 "February 2019" "Jigit jigdo tools"
+.TH JIGIT-MKIMAGE 1 "November 2019" "Jigit jigdo tools"
 .SH NAME
 jigit-mkimage \- Create an ISO image from jigdo files
 .SH SYNOPSIS
@@ -12,6 +12,10 @@ jigit-mkimage \- Create an ISO image from jigdo files
 .PP
 .B jigit-mkimage
 \fI\-f md5\-list\fR \fI\-t template\fR \fI\-M missing\-list\fR
+[\fIoptions\fR]... 
+.PP
+.B jigit-mkimage
+\fI\-F sha256\-list\fR \fI\-t template\fR \fI\-M missing\-list\fR
 [\fIoptions\fR]... 
 .SH DESCRIPTION
 .PP
@@ -53,8 +57,11 @@ must list the absolute path to the file. For example:
 00083436a3899a09633fc1026ef1e66e         22762  /mirror/debian/file3
 .fi
 .PP
+A SHA256 file uses a similar format, but needs more space for the
+bigger checksum output (64 characters rather than 12).
+.PP
 To rebuild an image you must specify \fBat least\fR one of the
-MD5 file and a jigdo file (\fB\-j\fR).
+MD5/SHA256 file and a jigdo file (\fB\-j\fR).
 .TP
 \fB\-m item=path\fR
 Used in conjunction with a jigdo file; specify where jigit-mkimage should
@@ -63,7 +70,7 @@ image. (e.g. "Debian=/mirror/debian").
 .TP
 \fB\-M missing file\fR
 If you're not sure if you have all the files needs to create an image,
-specify \fBboth\fR the jigdo file and an MD5 file along with the
+specify \fBboth\fR the jigdo file and an MD5/SHA256 file along with the
 template file and \-M <file>. jigit-mkimage will check to see that all the
 files are available \fBinstead of\fR building the image. Any files
 that are missing will be listed in the file specified here. See jigit
@@ -91,22 +98,23 @@ into cdrecord or to iso-image.pl. Specify an output filename if you
 want it written to disk instead.
 .TP
 \fB\-q\fR
-jigit-mkimage will normally check the MD5 sum of every file it reads and
-writes, and will fail if it finds any mismatches. Specify \fB-q\fR to
-tell it not to. This will normally run more quickly, but can leave you
-with a broken image so is \fBPOTENTIALLY DANGEROUS\fR. Use with care!
+jigit-mkimage will normally check the MD5/SHA256 sum of every file it
+reads and writes, and will fail if it finds any mismatches. Specify
+\fB-q\fR to tell it not to. This will normally run more quickly, but
+can leave you with a broken image so is \fBPOTENTIALLY
+DANGEROUS\fR. Use with care!
 .TP
 \fB\-s start offset\fR
 Rather than start at the beginning of the image, skip to the specified
 offset and start output there. Probably only useful in iso-image.pl
 when resuming a download. Specifying a non-zero offset also implies
-\fB-q\fR, as it's difficult to check MD5 sums when you're not checking
-the whole image.
+\fB-q\fR, as it's difficult to check MD5/SHA256 sums when you're not
+checking the whole image.
 \fB\-e end offset\fR
 Rather than end at the end of the image, stop at the specified
 offset. Probably only useful in iso-image.pl when resuming a
 download. Specifying an end offset also implies \fB-q\fR, as it's
-difficult to check MD5 sums when you're not checking the whole image.
+difficult to check MD5/SHA256 sums when you're not checking the whole image.
 .TP
 \fB\-z\fR
 Simply parse the template file and print the size of the image that

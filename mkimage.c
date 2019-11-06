@@ -3,7 +3,7 @@
  *
  * Tool to create an ISO image from jigdo files
  *
- * Copyright (c) 2004 Steve McIntyre <steve@einval.com>
+ * Copyright (c) 2004-2019 Steve McIntyre <steve@einval.com>
  *
  * GPL v2 - see COPYING
  */
@@ -21,9 +21,11 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <stdint.h>
 #include "endian.h"
 #include "jig-base64.h"
 #include "md5.h"
+#include "sha256.h"
 #include "jigdo.h"
 
 #define MISSING -1
@@ -36,9 +38,27 @@ static long long start_offset = 0;
 static long long end_offset = 0;
 static int quick = 0;
 static int verbose = 0;
+static int image_md5_valid = 0;
+static int image_sha256_valid = 0;
 static int check_jigdo_header = 1;
 static UINT64 out_size = 0;
 static char *missing_filename = NULL;
+
+#define ROUND_UP(N, S)      ((((N) + (S) - 1) / (S)) * (S))
+
+#define MD5_BITS            128
+#define MD5_BYTES           (MD5_BITS / 8)
+#define HEX_MD5_BYTES       (MD5_BITS / 4)
+#define BASE64_MD5_BYTES    ((ROUND_UP (MD5_BITS, 6)) / 6)
+
+#define SHA256_BITS         256
+#define SHA256_BYTES        (SHA256_BITS / 8)
+#define HEX_SHA256_BYTES    (SHA256_BITS / 4)
+#define BASE64_SHA256_BYTES ((ROUND_UP (SHA256_BITS, 6)) / 6)
+
+/* number of chars used to print a file size in our input checksum
+ * file */
+#define SIZE_BYTES          12
 
 typedef struct match_list_
 {
@@ -61,6 +81,16 @@ typedef struct md5_list_
 static md5_list_t *md5_list_head = NULL;
 static md5_list_t *md5_list_tail = NULL;
 
+typedef struct sha256_list_
+{
+    struct sha256_list_ *next;
+    INT64 file_size;
+    char *sha256;
+    char *full_path;
+} sha256_list_t;
+
+static sha256_list_t *sha256_list_head = NULL;
+static sha256_list_t *sha256_list_tail = NULL;
 static zip_state_t zip_state;
 
 /* Grab the file component from a full path */
@@ -188,7 +218,7 @@ static md5_list_t *find_file_in_md5_list(unsigned char *base64_md5, int need_siz
             fprintf(logfile, "find_file_in_md5_list: looking for %s, looking at %s (%s)\n", 
                     base64_md5, md5_list_entry->md5, md5_list_entry->full_path);
         
-        if (!memcmp(md5_list_entry->md5, base64_md5, 22)) {
+        if (!memcmp(md5_list_entry->md5, base64_md5, BASE64_MD5_BYTES)) {
             if (need_size &&
                 md5_list_entry->file_size == UNKNOWN)
                 md5_list_entry->file_size =
@@ -198,6 +228,30 @@ static md5_list_t *find_file_in_md5_list(unsigned char *base64_md5, int need_siz
         }
         /* else */
         md5_list_entry = md5_list_entry->next;
+    }
+    return NULL; /* Not found */
+}
+
+static sha256_list_t *find_file_in_sha256_list(unsigned char *base64_sha256, int need_size)
+{
+    sha256_list_t *sha256_list_entry = sha256_list_head;
+
+    while (sha256_list_entry)
+    {
+        if (verbose > 2)
+            fprintf(logfile, "find_file_in_sha256_list: looking for %s, looking at %s (%s)\n", 
+                    base64_sha256, sha256_list_entry->sha256, sha256_list_entry->full_path);
+
+        if (!memcmp(sha256_list_entry->sha256, base64_sha256, BASE64_SHA256_BYTES)) {
+            if (need_size &&
+                sha256_list_entry->file_size == UNKNOWN)
+                sha256_list_entry->file_size =
+                    get_file_size(sha256_list_entry->full_path);
+
+            return sha256_list_entry;
+        }
+        /* else */
+        sha256_list_entry = sha256_list_entry->next;
     }
     return NULL; /* Not found */
 }
@@ -241,6 +295,16 @@ static int find_file_in_mirror(char *jigdo_match, char *jigdo_name,
     return ENOENT;
 }
 
+static int hex_to_nibble(char hex)
+{
+    if (hex >= '0' && hex <= '9')
+        return hex - '0';
+    else if (hex >= 'A' && hex <= 'F')
+        return 10 + hex - 'A';
+    else if (hex >= 'a' && hex <= 'f')
+        return 10 + hex - 'a';
+    return 0;
+}
 
 static int add_md5_entry(INT64 size, char *md5, char *path)
 {
@@ -267,17 +331,6 @@ static int add_md5_entry(INT64 size, char *md5, char *path)
     return 0;
 }
 
-static int hex_to_nibble(char hex)
-{
-    if (hex >= '0' && hex <= '9')
-        return hex - '0';
-    else if (hex >= 'A' && hex <= 'F')
-        return 10 + hex - 'A';
-    else if (hex >= 'a' && hex <= 'f')
-        return 10 + hex - 'a';
-    return 0;
-}
-
 /* Parse an incoming MD5 file entry, working in place in the
  * (strduped) buffer we've been passed */
 static int parse_md5_entry(char *md5_entry)
@@ -285,22 +338,22 @@ static int parse_md5_entry(char *md5_entry)
     int error = 0;
     char *file_name = NULL;
     char *md5 = NULL;
-    unsigned char bin_md5[16];
+    unsigned char bin_md5[MD5_BYTES];
     int i;
 
-    md5_entry[32] = 0;
-    md5_entry[33] = 0;
+    md5_entry[HEX_MD5_BYTES] = 0;
+    md5_entry[HEX_MD5_BYTES + 1] = 0;
 
     /* Re-encode hex as base64 and overwrite in place; safe, as the
      * md5 will be shorter than the hex. */
-    for (i = 0; i < 16; i++)
+    for (i = 0; i < MD5_BYTES; i++)
         bin_md5[i] = (hex_to_nibble(md5_entry[2 * i]) << 4) |
                       hex_to_nibble(md5_entry[2 * i + 1]);
-    strncpy(md5_entry, base64_dump(bin_md5, 16), 22);
+    strncpy(md5_entry, base64_dump(bin_md5, MD5_BYTES), BASE64_MD5_BYTES);
 
-    md5_entry[22] = 0;
+    md5_entry[BASE64_MD5_BYTES] = 0;
     md5 = md5_entry;
-    file_name = &md5_entry[48];
+    file_name = &md5_entry[HEX_MD5_BYTES + 2 + SIZE_BYTES + 2];
 
     if ('\n' == file_name[strlen(file_name) -1])
         file_name[strlen(file_name) - 1] = 0;
@@ -335,6 +388,88 @@ static int parse_md5_file(char *filename)
     return 0;
 }
 
+static int add_sha256_entry(INT64 size, char *sha256, char *path)
+{
+    sha256_list_t *new = NULL;
+    new = calloc(1, sizeof(*new));
+    if (!new)
+        return ENOMEM;
+
+    new->sha256 = sha256;
+    new->full_path = path;
+    new->file_size = size;
+
+    if (!sha256_list_head)
+    {
+        sha256_list_head = new;
+        sha256_list_tail = new;
+    }
+    else
+    {
+        sha256_list_tail->next = new;
+        sha256_list_tail = new;
+    }
+
+    return 0;
+}
+
+/* Parse an incoming SHA256 file entry, working in place in the
+ * (strduped) buffer we've been passed */
+static int parse_sha256_entry(char *sha256_entry)
+{
+    int error = 0;
+    char *file_name = NULL;
+    char *sha256 = NULL;
+    unsigned char bin_sha256[SHA256_BYTES];
+    int i;
+
+    sha256_entry[HEX_SHA256_BYTES] = 0;
+    sha256_entry[HEX_SHA256_BYTES + 1] = 0;
+
+    /* Re-encode hex as base64 and overwrite in place; safe, as the
+     * sha256 will be shorter than the hex. */
+    for (i = 0; i < SHA256_BYTES; i++)
+        bin_sha256[i] = (hex_to_nibble(sha256_entry[2 * i]) << 4) |
+                      hex_to_nibble(sha256_entry[2 * i + 1]);
+    strncpy(sha256_entry, base64_dump(bin_sha256, SHA256_BYTES), BASE64_SHA256_BYTES);
+
+    sha256_entry[BASE64_SHA256_BYTES] = 0;
+    sha256 = sha256_entry;
+    file_name = &sha256_entry[HEX_SHA256_BYTES + 2 + SIZE_BYTES + 2];
+
+    if ('\n' == file_name[strlen(file_name) -1])
+        file_name[strlen(file_name) - 1] = 0;
+
+    error = add_sha256_entry(UNKNOWN, sha256, file_name);
+    return error;
+}
+
+static int parse_sha256_file(char *filename)
+{
+    char buf[2048];
+    FILE *file = NULL;
+    char *ret = NULL;
+    int error = 0;
+
+    file = fopen(filename, "rb");
+    if (!file)
+    {
+        fprintf(logfile, "Failed to open SHA256 file %s, error %d!\n", filename, errno);
+        return errno;
+    }
+
+    while(1)
+    {
+        ret = fgets(buf, sizeof(buf), file);
+        if (NULL == ret)
+            break;
+        error = parse_sha256_entry(strdup(buf));
+        if (error)
+            return error;
+    }
+    return 0;
+}
+
 /* DELIBERATELY do not sort these, or do anything clever with
    insertion. The entries in the jigdo file should be in the same
    order as the ones we'll want from the template. Simply add to the
@@ -345,12 +480,13 @@ static int add_file_entry(char *jigdo_entry)
     char *file_name = NULL;
     INT64 file_size = 0;
     char *ptr = jigdo_entry;
-    char *base64_md5 = NULL;
+    char *base64_checksum = NULL;
+    int csum_length;
     char *match = NULL;
     char *jigdo_name = NULL;
     
     /* Grab out the component strings from the entry in the jigdo file */
-    base64_md5 = jigdo_entry;
+    base64_checksum = jigdo_entry;
     while (0 != *ptr)
     {
         if ('=' == *ptr)
@@ -371,15 +507,32 @@ static int add_file_entry(char *jigdo_entry)
             ptr++;
     }
 
-    if (find_file_in_md5_list((unsigned char *)base64_md5, 0))
+    csum_length = strlen(base64_checksum);
+    if (csum_length == BASE64_SHA256_BYTES)
     {
-        free(jigdo_entry);
-        return 0; /* We already have an entry for this file; don't
-                   * waste any more time on it */
+        if (find_file_in_sha256_list((unsigned char *)base64_checksum, 0))
+        {
+            free(jigdo_entry);
+            return 0; /* We already have an entry for this file; don't
+                       * waste any more time on it */
+	}
+    }
+    else if (csum_length == BASE64_MD5_BYTES)
+    {
+        if (find_file_in_md5_list((unsigned char *)base64_checksum, 0))
+        {
+            free(jigdo_entry);
+            return 0; /* We already have an entry for this file; don't
+                       * waste any more time on it */
+	}
+    }
+    else
+    {
+        csum_length = -1; /* flag error */
     }
 
     /* else look for the file in the filesystem */
-    if (NULL == match || NULL == jigdo_name)
+    if (-1 == csum_length || NULL == match || NULL == jigdo_name)
     {
         fprintf(logfile, "Could not parse malformed jigdo entry \"%s\"\n", jigdo_entry);
         free(jigdo_entry);
@@ -390,10 +543,13 @@ static int add_file_entry(char *jigdo_entry)
     switch (error)
     {
         case 0:
-            base64_md5 = strdup(jigdo_entry);
-            if (base64_md5)
+            base64_checksum = strdup(jigdo_entry);
+            if (base64_checksum)
             {
-                add_md5_entry(file_size, base64_md5, file_name);
+                if (csum_length == BASE64_MD5_BYTES)
+                    add_md5_entry(file_size, base64_checksum, file_name);
+                else
+                    add_sha256_entry(file_size, base64_checksum, file_name);
                 free(jigdo_entry);
                 break;
             }
@@ -407,7 +563,12 @@ static int add_file_entry(char *jigdo_entry)
 
         default: /* ENOENT */
             if (missing_filename)
-                add_md5_entry(MISSING, base64_md5, jigdo_name);
+            {
+                if (csum_length == BASE64_MD5_BYTES)
+                    add_md5_entry(MISSING, base64_checksum, jigdo_name);
+                else
+                    add_sha256_entry(MISSING, base64_checksum, jigdo_name);
+            }
             else
             {
                 fprintf(logfile, "Unable to find a file to match %s\n", jigdo_name);
@@ -518,8 +679,21 @@ static int skip_data_block(INT64 data_size, FILE *template_file)
     return error;
 }
 
+/* Trivial helper - update all valid checksums */
+static void update_checksum_context(struct mk_MD5Context *md5_context,
+				    struct sha256_ctx *sha256_context,
+				    const void *buffer,
+				    size_t len)
+{
+    if (md5_context && image_md5_valid)
+        mk_MD5Update(md5_context, buffer, len);
+    if (sha256_context && image_sha256_valid)
+        sha256_process_bytes(buffer, len, sha256_context);
+}
+
 static int parse_data_block(INT64 data_size, FILE *template_file,
-                            struct mk_MD5Context *context)
+                            struct mk_MD5Context *md5_context,
+			    struct sha256_ctx *sha256_context)
 {
     int error = 0;
     INT64 remaining = data_size;
@@ -550,9 +724,9 @@ static int parse_data_block(INT64 data_size, FILE *template_file,
             display_progress(outfile, "template data");
 
         if (!quick)
-            mk_MD5Update(context,
-                         (unsigned char *)&zip_state.data_buf[zip_state.offset_in_curr_buf],
-                         size);
+            update_checksum_context(md5_context, sha256_context,
+				    (unsigned char *)&zip_state.data_buf[zip_state.offset_in_curr_buf],
+				    size);
         zip_state.offset_in_curr_buf += size;
         remaining -= size;
         
@@ -567,17 +741,17 @@ static int parse_data_block(INT64 data_size, FILE *template_file,
     return error;
 }
 
-static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size, 
-                            unsigned char *md5, struct mk_MD5Context *image_context,
-                            char *missing)
+static int parse_file_block_md5(INT64 offset, INT64 data_size, INT64 file_size, 
+				unsigned char *md5, struct mk_MD5Context *md5_context,
+				struct sha256_ctx *sha256_context, char *missing)
 {
-    char *base64_md5 = base64_dump(md5, 16);
+    char *base64_md5 = base64_dump(md5, MD5_BYTES);
     FILE *input_file = NULL;
     char buf[BUF_SIZE];
     INT64 remaining = data_size;
     int num_read = 0;
     struct mk_MD5Context file_context;
-    unsigned char file_md5[16];
+    unsigned char file_md5[MD5_BYTES];
     int out_size = 0;
     md5_list_t *md5_list_entry = NULL;
     
@@ -620,7 +794,7 @@ static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size,
             }
             if (!quick)
             {
-                mk_MD5Update(image_context, (unsigned char *)buf, size);
+                update_checksum_context(md5_context, sha256_context, (unsigned char *)buf, size);
                 mk_MD5Update(&file_context, (unsigned char *)buf, size);
             }
             
@@ -645,7 +819,7 @@ static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size,
         {
             mk_MD5Final(file_md5, &file_context);
         
-            if (memcmp(file_md5, md5, 16))
+            if (memcmp(file_md5, md5, MD5_BYTES))
             {
                 fprintf(logfile, "MD5 MISMATCH for file %s\n", md5_list_entry->full_path);
                 fprintf(logfile, "    template looking for %s\n", md5);
@@ -657,7 +831,7 @@ static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size,
     }
     if ( missing &&
          (MISSING == md5_list_entry->file_size) &&
-         (!memcmp(md5_list_entry->md5, base64_md5, 16) ) )
+         (!memcmp(md5_list_entry->md5, base64_md5, MD5_BYTES) ) )
     {
         write_missing_entry(missing, md5_list_entry->full_path);
         return 0;
@@ -665,10 +839,10 @@ static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size,
     /* else */
     if (verbose)
     {
-        char hex_md5[33];
+        char hex_md5[HEX_MD5_BYTES + 1];
         int i;
 
-        for (i = 0; i < 16; i++)
+        for (i = 0; i < MD5_BYTES; i++)
             sprintf(hex_md5 + 2 * i, "%2.2x", (unsigned int) md5[i]);
 
         fprintf(logfile, "Unable to find a file for block with md5 %s (%s)\n", hex_md5, base64_md5);
@@ -676,20 +850,137 @@ static int parse_file_block(INT64 offset, INT64 data_size, INT64 file_size,
     return ENOENT;
 }
 
+static int parse_file_block_sha256(INT64 offset, INT64 data_size, INT64 file_size,
+				   unsigned char *sha256, struct mk_MD5Context *md5_context,
+				   struct sha256_ctx *sha256_context, char *missing)
+{
+    char *base64_sha256 = base64_dump(sha256, SHA256_BYTES);
+    FILE *input_file = NULL;
+    char buf[BUF_SIZE];
+    INT64 remaining = data_size;
+    int num_read = 0;
+    struct sha256_ctx file_context;
+    unsigned char file_sha256[SHA256_BYTES];
+    int out_size = 0;
+    sha256_list_t *sha256_list_entry = NULL;
+
+    if (!quick)
+        sha256_init_ctx(&file_context);
+
+    sha256_list_entry = find_file_in_sha256_list((unsigned char *)base64_sha256, 1);
+    if (sha256_list_entry && file_size == sha256_list_entry->file_size)
+    {
+        if (verbose > 1)
+            fprintf(logfile, "Reading %s\n", sha256_list_entry->full_path);
+
+        input_file = fopen(sha256_list_entry->full_path, "rb");
+        if (!input_file)
+        {
+            fprintf(logfile, "Unable to open mirror file %s, error %d\n",
+                    sha256_list_entry->full_path, errno);
+            return errno;
+        }
+
+        if (missing)
+        {
+            fclose(input_file);
+            return 0;
+        }
+
+        fseek(input_file, offset, SEEK_SET);
+        while (remaining)
+        {
+            int size = MIN(BUF_SIZE, remaining);
+            memset(buf, 0, BUF_SIZE);
+
+            num_read = fread(buf, size, 1, input_file);
+            if (!num_read)
+            {
+                fprintf(logfile, "Unable to read from mirror file %s, error %d (offset %ld, length %d)\n",
+                        sha256_list_entry->full_path, errno, ftell(input_file), size);
+                fclose(input_file);
+                return errno;
+            }
+            if (!quick)
+            {
+                update_checksum_context(md5_context, sha256_context, (unsigned char *)buf, size);
+                sha256_process_bytes((unsigned char *)buf, size, &file_context);
+            }
+
+            out_size = fwrite(buf, size, 1, outfile);
+            if (!out_size)
+            {
+                fprintf(logfile, "parse_file_block: fwrite %d failed with error %d; aborting\n", size, ferror(outfile));
+                return ferror(outfile);
+            }
+
+            if (verbose)
+                display_progress(outfile, file_base_name(sha256_list_entry->full_path));
+
+            remaining -= size;
+        }
+        if (verbose > 1)
+            fprintf(logfile, "parse_file_block: wrote %lld bytes of data from %s\n",
+                    file_size, sha256_list_entry->full_path);
+        fclose(input_file);
+
+        if (!quick)
+        {
+            sha256_finish_ctx(&file_context, file_sha256);
+
+            if (memcmp(file_sha256, sha256, SHA256_BYTES))
+            {
+                fprintf(logfile, "SHA256 MISMATCH for file %s\n", sha256_list_entry->full_path);
+                fprintf(logfile, "    template looking for %s\n", sha256);
+                fprintf(logfile, "    file in mirror is    %s\n", file_sha256);
+                return EINVAL;
+            }
+        }
+        return 0;
+    }
+    if ( missing &&
+         (MISSING == sha256_list_entry->file_size) &&
+         (!memcmp(sha256_list_entry->sha256, base64_sha256, SHA256_BYTES) ) )
+    {
+        write_missing_entry(missing, sha256_list_entry->full_path);
+        return 0;
+    }
+    /* else */
+    if (verbose)
+    {
+        char hex_sha256[HEX_SHA256_BYTES + 1];
+        int i;
+
+        for (i = 0; i < SHA256_BYTES; i++)
+            sprintf(hex_sha256 + 2 * i, "%2.2x", (unsigned int) sha256[i]);
+
+        fprintf(logfile, "Unable to find a file for block with sha256 %s (%s)\n", hex_sha256, base64_sha256);
+    }
+    return ENOENT;
+}
+
 static int parse_template_file(char *filename, int sizeonly, char *missing, char *output_name)
 {
     INT64 template_offset = 0;
-    INT64 bytes = 0;
     char *buf = NULL;
     FILE *file = NULL;
     INT64 file_size = 0;
     INT64 desc_start = 0;
     INT64 written_length = 0;
     INT64 output_offset = 0;
+    INT64 desc_size = 0;
+    INT64 image_size = 0;
+    size_t bytes_read = 0;
+    size_t total_read = 0;
     int i = 0;
     int error = 0;
-    struct mk_MD5Context template_context;
-    unsigned char image_md5sum[16];
+    char *bufptr;
+    struct mk_MD5Context template_md5_context;
+    struct sha256_ctx template_sha256_context;
+    unsigned char image_md5sum[MD5_BYTES];
+    unsigned char image_sha256sum[SHA256_BYTES];
+    unsigned char image_md5sum_from_tmpl[MD5_BYTES];
+    unsigned char image_sha256sum_from_tmpl[SHA256_BYTES];
 
     zip_state.total_offset = 0;
     
@@ -712,70 +1003,147 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
     file_size = get_file_size(filename);
     fseek(file, file_size - 6, SEEK_SET);
     fread(buf, 6, 1, file);
-    desc_start = file_size - read_le48((unsigned char *)buf);
+    desc_size = read_le48((unsigned char *)buf);
+    desc_start = file_size - desc_size;
 
-    /* Now seek back to the beginning image desc block to grab the MD5
-       and image length */
-    fseek(file, file_size - 33, SEEK_SET);
-    fread(buf, BUF_SIZE, 1, file);
-    if (buf[0] != 5) /* image data */
+    /* Load the DESC block in from the template file in and find the
+     * final descriptor that describes the image
+     * itself. Unfortunately, only way to do this is by scanning
+     * through the whole set of descriptors in the template. */
+    fseek(file, desc_start, SEEK_SET);
+    buf = realloc(buf, desc_size);
+    if (!buf)
     {
-        fprintf(logfile, "Failed to find image desc in the template file\n");
+        fprintf(logfile, "Failed to malloc %lld bytes. Abort!\n", desc_size);
         fclose(file);
+        return ENOMEM;
+    }
+    while (total_read < desc_size)
+    {
+        bytes_read = fread(buf, 1, desc_size, file);
+        if (ferror(file))
+        {
+            fprintf(logfile, "Failed to read to the end of the template file, error %d\n", ferror(file));
+            fclose(file);
+            free(buf);
+            return EIO;
+        }
+        total_read += bytes_read;
+    }
+
+    /* Now start parsing the DESC block */
+    bufptr = buf;
+    if (strncmp(bufptr, "DESC", 4))
+    {
+        fprintf(logfile, "Failed to find desc start in the template file\n");
+        fclose(file);
+        free(buf);
+        return EINVAL;
+    }
+    bufptr += 4;
+
+    if ((file_size - desc_start) != read_le48((unsigned char *)bufptr))
+    {
+        fprintf(logfile, "Inconsistent desc length in the template file!\n");
+        fprintf(logfile, "Final chunk says %lld, first chunk says %lld\n",
+                file_size - desc_start, read_le48((unsigned char *)bufptr));
+        fclose(file);
+        free(buf);
+        return EINVAL;
+    }
+    bufptr += 6;
+
+    while (bufptr < (buf + desc_size - 6))
+    {
+        switch (bufptr[0]) {
+            case BLOCK_DATA:
+                bufptr += 7;
+                break;
+            case BLOCK_MATCH_MD5:
+                bufptr += 31;
+                break;
+            case BLOCK_MATCH_SHA256:
+                bufptr += 47;
+                break;
+            case BLOCK_IMAGE_MD5:
+                image_size = read_le48((unsigned char *)&bufptr[1]);
+                memcpy(image_md5sum_from_tmpl, (unsigned char*)&bufptr[7], MD5_BYTES);
+		image_md5_valid = 1;
+                bufptr += 27;
+                break;
+            case BLOCK_IMAGE_SHA256:
+                image_size = read_le48((unsigned char *)&bufptr[1]);
+                memcpy(image_sha256sum_from_tmpl, (unsigned char*)&bufptr[7], SHA256_BYTES);
+		image_sha256_valid = 1;
+                bufptr += 43;
+                break;
+            default:
+                fprintf(logfile, "Unknown block type %d!\n", buf[0]);
+                fclose(file);
+                free(buf);
+                return EINVAL;
+        }
+    }
+
+    if (!image_md5_valid && !image_sha256_valid)
+    {
+        fprintf(logfile, "Failed to find a valid image information block in the template file\n");
+        fclose(file);
+	free(buf);
         return EINVAL;
     }
 
     if (sizeonly)
     {
         fclose(file);
-        printf("%lld\n", read_le48((unsigned char *)&buf[1]));
+	free(buf);
+        printf("%lld\n", image_size);
         return 0;
     }
 
     if (verbose)
     {
-        fprintf(logfile, "Image MD5 should be    ");
-        for (i = 0; i < 16; i++)
-            fprintf(logfile, "%2.2x", (unsigned char)buf[i+7]);
-        fprintf(logfile, "\n");
-        fprintf(logfile, "Image size should be   %lld bytes\n", read_le48((unsigned char *)&buf[1]));
-    }
-
-    out_size = read_le48((unsigned char *)&buf[1]);
-    
-    /* Now seek back to the start of the desc block */
-    fseek(file, desc_start, SEEK_SET);
-    fread(buf, 10, 1, file);
-    if (strncmp(buf, "DESC", 4))
-    {
-        fprintf(logfile, "Failed to find desc start in the template file\n");
-        fclose(file);
-        return EINVAL;
-    }
-    if ((file_size - desc_start) != read_le48((unsigned char *)&buf[4]))
-    {
-        fprintf(logfile, "Inconsistent desc length in the template file!\n");
-        fprintf(logfile, "Final chunk says %lld, first chunk says %lld\n",
-                file_size - desc_start, read_le48((unsigned char *)&buf[4]));
-        fclose(file);
-        return EINVAL;
+        if (image_md5_valid)
+        {
+            fprintf(logfile, "Image MD5 should be    ");
+            for (i = 0; i < MD5_BYTES; i++)
+                fprintf(logfile, "%2.2x", image_md5sum_from_tmpl[i]);
+            fprintf(logfile, "\n");
+        }
+        if (image_sha256_valid)
+        {
+            fprintf(logfile, "Image SHA256 should be    ");
+            for (i = 0; i < SHA256_BYTES; i++)
+                fprintf(logfile, "%2.2x", image_sha256sum_from_tmpl[i]);
+            fprintf(logfile, "\n");
+        }
+        fprintf(logfile, "Image size should be   %lld bytes\n", image_size);
     }
 
     if (!quick)
-        mk_MD5Init(&template_context);
-    template_offset = desc_start + 10;
+    {
+        if (image_md5_valid)
+            mk_MD5Init(&template_md5_context);
+        if (image_sha256_valid)
+            sha256_init_ctx(&template_sha256_context);
+    }
 
     if (verbose)
         fprintf(logfile, "Creating ISO image %s\n", output_name);
 
-    /* Main loop - walk through the template file and expand each entry we find */
+    template_offset = 10;
+
+    /* Main loop - back to the start of the DESC block and now walk
+     * through and expand each entry we find */
     while (1)
     {
         INT64 extent_size;
         INT64 skip = 0;
         INT64 read_length = 0;
 
-        if (template_offset >= (file_size - 33))
+        bufptr = &buf[template_offset];
+
+        if (template_offset >= (desc_size - 6))
         {
             if (verbose > 1)
                 fprintf(logfile, "Reached end of template file\n");
@@ -787,28 +1155,12 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
             fprintf(logfile, "Reached end of range requested\n");            
             break;
         }
-        
-        fseek(file, template_offset, SEEK_SET);
-        bytes = fread(buf, (MIN (BUF_SIZE, file_size - template_offset)), 1, file);
-        if (1 != bytes)
-        {
-            fprintf(logfile, "Failed to read template file!\n");
-            fclose(file);
-            return EINVAL;
-        }
-        
-        extent_size = read_le48((unsigned char *)&buf[1]);
+
+        extent_size = read_le48((unsigned char *)&bufptr[1]);
         read_length = extent_size;
-        
-        if (start_offset > output_offset)
-            skip = start_offset - output_offset;
-        if ((output_offset + extent_size) > end_offset)
-            read_length -= (output_offset + extent_size - end_offset - 1);
-        read_length -= skip;
-        
-        switch (buf[0])
+
+        switch (bufptr[0])
         {
-            
             case BLOCK_DATA: /* unmatched data */
                 template_offset += 7;
                 if (missing)
@@ -823,7 +1175,7 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
                         fclose(file);
                         return error;
                     }
-                    error = parse_data_block(read_length, file, &template_context);
+                    error = parse_data_block(read_length, file, &template_md5_context, &template_sha256_context);
                     if (error)
                     {
                         fprintf(logfile, "Unable to read data block, error %d\n", error);
@@ -835,11 +1187,27 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
                 else
                     error = skip_data_block(extent_size, file);
                 break;
-            case BLOCK_MATCH:
+            case BLOCK_MATCH_MD5:
                 template_offset += 31;
                 if ((output_offset + extent_size) >= start_offset)
                 {
-                    error = parse_file_block(skip, read_length, extent_size, (unsigned char *)&buf[15], &template_context, missing);
+                    error = parse_file_block_md5(skip, read_length, extent_size, (unsigned char *)&bufptr[15],
+						 &template_md5_context, &template_sha256_context, missing);
+                    if (error)
+                    {
+                        fprintf(logfile, "Unable to read file block, error %d\n", error);
+                        fclose(file);
+                        return error;
+                    }
+                    written_length += read_length;
+                }
+                break;
+            case BLOCK_MATCH_SHA256:
+                template_offset += 31;
+                if ((output_offset + extent_size) >= start_offset)
+                {
+                    error = parse_file_block_sha256(skip, read_length, extent_size, (unsigned char *)&bufptr[15],
+						    &template_md5_context, &template_sha256_context, missing);
                     if (error)
                     {
                         fprintf(logfile, "Unable to read file block, error %d\n", error);
@@ -866,11 +1234,46 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
         fprintf(logfile, "\n");
         if (!quick)
         {
-            mk_MD5Final (image_md5sum, &template_context);
-            fprintf(logfile, "Output image MD5 is    ");
-            for (i = 0; i < 16; i++)
-                fprintf(logfile, "%2.2x", image_md5sum[i]);
-            fprintf(logfile, "\n");
+            if (image_md5_valid)
+            {
+                mk_MD5Final (image_md5sum, &template_md5_context);
+		fprintf(logfile, "Output image MD5 is    ");
+		for (i = 0; i < MD5_BYTES; i++)
+                    fprintf(logfile, "%2.2x", image_md5sum[i]);
+		fprintf(logfile, "\n");
+		if (0 == memcmp(image_md5sum, image_md5sum_from_tmpl, MD5_BYTES))
+		{
+                    fprintf(logfile, "OK: MD5 checksums match, image is good!\n");
+                    fprintf(logfile, "WARNING: MD5 is not considered a secure hash!\n");
+                    fprintf(logfile, "WARNING: It is recommended to verify your image in other ways too!\n");
+		}
+		else
+		{
+                    fprintf(logfile, "CHECKSUMS DO NOT MATCH - PROBLEM DETECTED\n");
+		    fclose(file);
+		    free(buf);
+		    return EIO;
+		}
+	    }
+            if (image_sha256_valid)
+            {
+                sha256_finish_ctx(&template_sha256_context, image_sha256sum);
+		fprintf(logfile, "Output image SHA256 is    ");
+		for (i = 0; i < SHA256_BYTES; i++)
+                    fprintf(logfile, "%2.2x", image_sha256sum[i]);
+		fprintf(logfile, "\n");
+		if (0 == memcmp(image_sha256sum, image_sha256sum_from_tmpl, SHA256_BYTES))
+		{
+                    fprintf(logfile, "OK: SHA256 checksums match, image is good!\n");
+		}
+		else
+		{
+                    fprintf(logfile, "CHECKSUMS DO NOT MATCH - PROBLEM DETECTED\n");
+		    fclose(file);
+		    free(buf);
+		    return EIO;
+		}
+	    }
         }
         fprintf(logfile, "Output image length is %lld bytes\n", written_length);
     }
@@ -883,6 +1286,8 @@ static void usage(char *progname)
     printf("%s [OPTIONS]\n\n", progname);
     printf(" Options:\n");
     printf(" -f <MD5 name>       Specify an input MD5 file. MD5s must be in jigdo's\n");
+    printf("                     pseudo-base64 format\n");
+    printf(" -F <SHA256 name>    Specify an input SHA256 file. SHA256s must be in jigdo's\n");
     printf("                     pseudo-base64 format\n");
     printf(" -j <jigdo name>     Specify the input jigdo file\n");
     printf(" -t <template name>  Specify the input template file\n");
@@ -910,6 +1315,7 @@ int main(int argc, char **argv)
     char *template_filename = NULL;
     char *jigdo_filename = NULL;
     char *md5_filename = NULL;
+    char *sha256_filename = NULL;
     char *output_name = NULL;
     int c = -1;
     int error = 0;
@@ -922,7 +1328,7 @@ int main(int argc, char **argv)
 
     while(1)
     {
-        c = getopt(argc, argv, ":ql:o:j:t:f:m:M:h?s:e:zvO");
+        c = getopt(argc, argv, ":ql:o:j:t:f:F:m:M:h?s:e:zvO");
         if (-1 == c)
             break;
         
@@ -979,6 +1385,15 @@ int main(int argc, char **argv)
                 /* else */
                 md5_filename = optarg;
                 break;                
+            case 'F':
+                if (sha256_filename)
+                {
+                    fprintf(logfile, "Can only specify one SHA256 file!\n");
+                    return EINVAL;
+                }
+                /* else */
+                sha256_filename = optarg;
+                break;
             case 'm':
                 error = add_match_entry(strdup(optarg));
                 if (error)
@@ -1023,9 +1438,10 @@ int main(int argc, char **argv)
 
     if ((NULL == jigdo_filename) &&
         (NULL == md5_filename) && 
+	(NULL == sha256_filename) &&
         !sizeonly)
     {
-        fprintf(logfile, "No jigdo file or MD5 file specified!\n");
+        fprintf(logfile, "No jigdo file or MD5/SHA256 file specified!\n");
         usage(argv[0]);
         return EINVAL;
     }
@@ -1044,6 +1460,17 @@ int main(int argc, char **argv)
         if (error)
         {
             fprintf(logfile, "Unable to parse the MD5 file %s, error %d\n", md5_filename, error);
+            return error;
+        }
+    }
+
+    if (sha256_filename)
+    {
+        /* Build up a list of the files we've been fed */
+        error = parse_sha256_file(sha256_filename);
+        if (error)
+        {
+            fprintf(logfile, "Unable to parse the SHA256 file %s, error %d\n", sha256_filename, error);
             return error;
         }
     }
