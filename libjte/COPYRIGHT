@@ -7,7 +7,7 @@ This statement overrides for the libjte package as a whole any license
 statements by Steve McIntyre, George Danchev, and Thomas Schmitt in the
 source code files of the package. Individually they are licensed as stated.
 
-libjte contains code with explicitely unclaimed copyrights, code from programs
+libjte contains code with explicitly unclaimed copyrights, code from programs
 and libraries with copyright of Free Software Foundation under LGPLv2.1,
 code with copyright of Steve McIntyre, George Danchev, and Thomas Schmitt
 under LGPLv2.1.

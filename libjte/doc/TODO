@@ -8,11 +8,11 @@ EASY
 
 NOT SO EASY
 ~~~~~~~~~~~
-* Write a cousin to list_file_in_jigdo() without calculating md5 inside,
+* Write a cousin to list_file_in_jigdo() without calculating checksums inside,
   since it is likely image-generators already have that computed.
 
   A side effect to avoid: a matched file will get read three times so far:
-  - In list_file_in_jigdo() by calculate_md5sum(filename, size, md5);
+  - In list_file_in_jigdo() by checksum_calculate(filename, size, checksum);
   - In write_jt_match_record() by if ((infile = fopen(filename, "rb")) == NULL) {
   - By the IsoFileSource object in the libisofs data file loop.
   Should that be optimized a bit? How?

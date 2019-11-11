@@ -1,7 +1,7 @@
 /*
  * This file has been modified for the cdrkit suite.
  *
- * The behaviour and appearence of the program code below can differ to a major
+ * The behaviour and appearance of the program code below can differ to a major
  * extent from the version distributed by the original author(s).
  *
  * For details, see Changelog file distributed with the cdrkit package. If you

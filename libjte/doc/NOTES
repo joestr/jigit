@@ -14,7 +14,7 @@ Implemented are :
 -jigdo-exclude PATTERN      Pattern(s) to exclude from the jigdo file
 -jigdo-map PATTERN1=PATTERN2 Pattern(s) to map paths (e.g. Debian=/mirror/debian)
 -md5-list FILE              File containing MD5 sums of the files that should be checked
--sha256-list FILE           File containing SHA256 sums of the files that should be checked
+-checksum-list FILE         File containing checksums of the files that should be checked
 -jigdo-template-compress ALGORITHM Choose to use gzip or bzip2 compression for template data; default is gzip
 
 Not yet implemented:
@@ -42,8 +42,9 @@ Global variables from application POV (declated in jte.h)
 - extern char *jmd5_list;
   XORRISO: -md5-list filepath
 
-- extern char *jsha256_list;
-  XORRISO: -sha256-list filepath
+- extern char *checksum_list;
+  XORRISO: -checksum-list filepath
+  XORRISO: -md5-list filepath
 
 - extern FILE *jtjigdo;
   XORRISO: handle initialized with -jigdo-jigdo filepath

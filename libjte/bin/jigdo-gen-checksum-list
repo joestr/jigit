@@ -6,7 +6,7 @@
 # This script is distributed according to the terms of the GNU GPL v2.
 # This should be better rewritten in C at some future point. Ref: pwd code.
 
-# Create a list of checksums encoded in hexidecimal format and print to standard output
+# Create a list of checksums encoded in hexadecimal format and print to standard output
 
 # Format Description
 # A line in the emerging file is to be composed as follows:
