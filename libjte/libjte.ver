@@ -1,32 +1,42 @@
 LIBJTE1 {
-global:
-libjte__version;
-libjte__is_compatible;
-libjte_new;
-libjte_destroy;
-libjte_set_outfile;
-libjte_set_verbose;
-libjte_set_template_path;
-libjte_set_jigdo_path;
-libjte_set_md5_path;
-libjte_set_min_size;
-libjte_set_checksum_iso;
-libjte_set_checksum_template;
-libjte_set_compression;
-libjte_add_exclude;
-libjte_add_md5_demand;
-libjte_add_mapping;
-libjte_write_header;
-libjte_write_footer;
-libjte_decide_file_jigdo;
-libjte_write_unmatched;
-libjte_write_match_record;
-libjte_set_image_size;
-libjte_begin_data_file;
-libjte_show_data_chunk;
-libjte_end_data_file;
-libjte_set_error_behavior;
-libjte_get_next_message;
-libjte_clear_msg_list;
-local: *;
+  global:
+    libjte__version;
+    libjte__is_compatible;
+    libjte_new;
+    libjte_destroy;
+    libjte_set_outfile;
+    libjte_set_verbose;
+    libjte_set_template_path;
+    libjte_set_jigdo_path;
+    libjte_set_md5_path;
+    libjte_set_min_size;
+    libjte_set_checksum_iso;
+    libjte_set_checksum_template;
+    libjte_set_compression;
+    libjte_add_exclude;
+    libjte_add_md5_demand;
+    libjte_add_mapping;
+    libjte_write_header;
+    libjte_write_footer;
+    libjte_decide_file_jigdo;
+    libjte_write_unmatched;
+    libjte_write_match_record;
+    libjte_set_image_size;
+    libjte_begin_data_file;
+    libjte_show_data_chunk;
+    libjte_end_data_file;
+    libjte_set_error_behavior;
+    libjte_get_next_message;
+    libjte_clear_msg_list;
+  local:
+    *;
 };
+LIBJTE2 {
+  global:
+    libjte_set_checksum_algorithm;
+    libjte_set_checksum_path;
+    libjte_add_checksum_demand;
+    libjte_decide_file_jigdo2;
+    libjte_write_match_record2;
+} LIBJTE1;
+

@@ -34,8 +34,5 @@ void mk_MD5Update (struct mk_MD5Context *context,
 void mk_MD5Final (unsigned char digest[16],
 			  struct mk_MD5Context *context);
 void mk_MD5Transform (mk_uint32 buf[4], const unsigned char in[64]);
-int mk_MD5Parse(unsigned char in[33], unsigned char out[16]);
-int calculate_md5sum(char *filename, uint64_t size, unsigned char out[16]);
-
 
 #endif /* !MD5_H */

@@ -1,7 +1,7 @@
 /*
  * checksum.h
  *
- * Copyright (c) 2008- Steve McIntyre <steve@einval.com>
+ * Copyright (c) 2008-2019 Steve McIntyre <steve@einval.com>
  *
  * Definitions and prototypes for a generic checksum interface, used
  * in JTE. Inspired heavily by the interface to the MD5 code we're
@@ -75,6 +75,23 @@ const char *          checksum_hex(checksum_context_t *context,
 
 extern int            parse_checksum_algo(char *arg,
                                           int *algo);
+
+/* Helper function: Simply calculate the checksum of the first "size"
+ * bytes of a file using the specified algorithm. If size == -1,
+ * calculate the checksum for the whole of the file. The caller is
+ * responsible for passing in a large enough buffer as "digest", based
+ * on their choice of algorithm. */
+extern int            checksum_calculate(char *filename,
+                                         int64_t size,
+                                         unsigned char *digest,
+                                         enum checksum_types which);
+
+
+/* Helper function: Parse a hexadecimal string "in" of length "size"
+   characters (must be even) and convert to a raw checksum in
+   "out". out must be allocated of a large-enough size by the
+   caller */
+int checksum_parse_hex(char *in, unsigned char *out, int size);
 
 #endif
 /* _JTE_CHECKSUM_H_ */

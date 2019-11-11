@@ -1,7 +1,7 @@
 /*
  * checksum.c
  *
- * Copyright (c) 2008- Steve McIntyre <steve@einval.com>
+ * Copyright (c) 2008-2019 Steve McIntyre <steve@einval.com>
  *
  * Implementation of a generic checksum interface, used in JTE.
  *
@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/stat.h>
 
 #ifdef HAVE_STDINT_H
 #include <stdint.h>
@@ -516,6 +517,88 @@ int parse_checksum_algo(char *arg, int *algo)
         start_ptr += len + 1;
     }
    
+    return 0;
+}
+
+/* Helper function: Simply calculate the checksum of the first "size"
+ * bytes of a file using the specified algorithm. If size == -1,
+ * calculate the checksum for the whole of the file. The caller is
+ * responsible for passing in a large enough buffer as "digest", based
+ * on their choice of algorithm. */
+int checksum_calculate(char *filename,
+					   int64_t size,
+					   unsigned char *out,
+					   enum checksum_types which)
+{
+	char		buffer[32768];
+    FILE       *infile = NULL;
+    int64_t     remain = 0;
+    int	        use;
+    struct checksum_context_t *context;
+
+	context = checksum_init_context(1 << which, "misc");
+	if (!context)
+	{
+		errno = ENOMEM;
+		return -1;
+	}
+
+    infile = fopen(filename, "rb");
+    if (!infile)
+		return -1;
+
+	if (-1 == size)
+	{
+        struct stat st;
+		stat(filename, &st);
+		size = st.st_size;
+	}
+
+    remain = size;
+    while (remain > 0)
+    {
+		use = (remain > sizeof(buffer) ? sizeof(buffer) : remain);
+		if (fread(buffer, 1, use, infile) == 0)
+			return -1;
+		/* Update the checksum */
+		checksum_update(context, (unsigned char *)buffer, use);
+		remain -= use;
+    }
+    fclose(infile);
+	checksum_final(context);
+	checksum_copy(context, which, out);
+	checksum_free_context(context);
+    return 0;
+}
+
+/* Read in a hex-dumped checksum and parse it */
+int checksum_parse_hex(char *in, unsigned char *out, int size)
+{
+    int i = 0;
+
+	if (size % 2) /* odd number */
+		return EINVAL;
+
+    for (i = 0; i < size / 2; i++)
+    {
+        if (in[2*i] >= '0' && in[2*i] <= '9')
+            in[2*i] -= '0';
+        else if (in[2*i] >= 'A' && in[2*i] <= 'F')
+            in[2*i] += 10 - 'A';
+        else if (in[2*i] >= 'a' && in[2*i] <= 'f')
+            in[2*i] += 10 - 'a';
+        else
+            return 1;
+        if (in[1+(2*i)] >= '0' && in[1+(2*i)] <= '9')
+            in[1+(2*i)] -= '0';
+        else if (in[1+(2*i)] >= 'A' && in[1+(2*i)] <= 'F')
+            in[1+(2*i)] += 10 - 'A';
+        else if (in[1+(2*i)] >= 'a' && in[1+(2*i)] <= 'f')
+            in[1+(2*i)] += 10 - 'a';
+        else
+            return 1;
+        out[i] = in[2*i] << 4 | in[1+(2*i)];
+    }
     return 0;
 }
 

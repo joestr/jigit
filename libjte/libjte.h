@@ -26,7 +26,7 @@ struct libjte_env;
     at build time.
     @since 0.1.0
 */
-#define LIBJTE_VERSION_MAJOR   1
+#define LIBJTE_VERSION_MAJOR   2
 #define LIBJTE_VERSION_MINOR   0
 #define LIBJTE_VERSION_MICRO   0
 
@@ -102,6 +102,34 @@ int libjte_set_outfile(struct libjte_env *jte_handle, char *outfile);
 */
 int libjte_set_verbose(struct libjte_env *jte_handle, int verbose);
 
+/** Choose the checksum algorithm that libjte will use in its checksum
+    calculations and expectations. Supported algorithms are "md5" and
+    "sha256". If this function is *not* called explicitly, libjte will
+    default to "md5" for backwards compatibility with older versions
+    of the library that only supported md5.
+    Choice of the checksum algorithm here is important elsewhere in
+    terms of sizes of buffers, formats of input, etc.:
+    - libjte_set_md5_path()
+    - libjte_set_checksum_path()
+    - libjte_decide_file_jigdo{,2}()
+    - libjte_write_match_record{,2}()
+    It also affects the compatibility of the jigdo and template files
+    created. Choosing "md5" will modify the format of the template
+    file, and declare the "Version" in the [Jigdo] field to be
+    1.2. Choosing "sha256" will declare the "Version" in the [Jigdo]
+    field to be 2.0 and the output will *NOT* work with older jigdo
+    client tools.
+    @since 2.0.0
+    @param jte_handle  The environment to be manipulated.
+    @param algorithm   If not 0 : cause verbosity
+    @param size	       Pointer to storage; if no errors, will be filled
+                       with the size in bytes of the checksum output for
+		       future function calls to use
+    @return  >0 means success, <=0 indicates failure
+*/
+int libjte_set_checksum_algorithm(struct libjte_env *jte_handle,
+				  char *algorithm, int *size);
+
 /** Define the file address on hard disk for the template file.
     @since 0.1.0
     @param jte_handle  The environment to be manipulated.
@@ -120,12 +148,25 @@ int libjte_set_jigdo_path(struct libjte_env *jte_handle, char *path);
 
 /** Tell libjte the hard disk address of the .md5 file, which lists the
     data files which might get extracted and referred in the jigdo file.
+    Still supported in 2.0.0, but is now just an alias for
+    libjte_set_checksums_path(handle, path) below
+    \deprecated since 2.0.0
     @since 0.1.0
     @param jte_handle  The environment to be manipulated.
     @param path        Will be used with fopen(path, "r")
     @return  >0 means success, <=0 indicates failure
 */
 int libjte_set_md5_path(struct libjte_env *jte_handle, char *path);
+
+/** Tell libjte the hard disk address of the .checksum file, which
+    lists the data files which might get extracted and referred in the
+    jigdo file.
+    @since 2.0.0
+    @param jte_handle  The environment to be manipulated.
+    @param path        Will be used with fopen(path, "r")
+    @return  >0 means success, <=0 indicates failure
+*/
+int libjte_set_checksum_path(struct libjte_env *jte_handle, char *path);
 
 /** Define a minimum size for data files to get extracted and referred in
     the jigdo file.
@@ -190,12 +231,29 @@ int libjte_add_exclude(struct libjte_env *jte_handle, char *pattern);
     a matching entry in the .md5 file. If it matches, then said two functions
     will return error resp. perform exit() if this is enabled by 
     libjte_set_error_behavior().
+    Still supported in 2.0.0, but is now just an alias for
+    libjte_add_checksum_demand(handle, path) below
+    \deprecated since 2.0.0
     @since 0.1.0
     @param jte_handle  The environment to be manipulated.
     @param             String for regcomp(3)
     @return  >0 means success, <=0 indicates failure
 */
 int libjte_add_md5_demand(struct libjte_env *jte_handle, char *pattern);
+
+/** Add a regular expression pattern to the list of files which must be
+    found matching in the .checksum file.
+    The pattern will be tested against the filenames that are handed
+    to libjte_decide_file_jigdo() or libjte_begin_data_file() and do
+    not find a matching entry in the .checksum file. If it matches,
+    then said two functions will return error resp. perform exit() if
+    this is enabled by libjte_set_error_behavior().
+    @since 2.0.0
+    @param jte_handle  The environment to be manipulated.
+    @param             String for regcomp(3)
+    @return  >0 means success, <=0 indicates failure
+*/
+int libjte_add_checksum_demand(struct libjte_env *jte_handle, char *pattern);
 
 /** Add a To=From pair to the list of mirror name mapping.
     The pair will be split at the '=' character. The mirror_name submitted to
@@ -204,7 +262,7 @@ int libjte_add_md5_demand(struct libjte_env *jte_handle, char *pattern);
     The resulting string will be used as data file name in the jigdo file.
 
     libjte_decide_file_jigdo() gets the mirror_name from the matching line
-    in the .md5 file and hands it to the application.
+    in the .checksum file and hands it to the application.
     libjte_begin_data_file() obtains the mirror name and processes it without
     bothering the application.
 
@@ -279,6 +337,7 @@ int libjte_write_footer(struct libjte_env *jte_handle);
 /** Decide whether a data file shall be extracted, i.e. referred in the
     template file and listed in the jigdo file, or whether its content
     shall be written compressed into the template file.
+    \deprecated since 2.0.0, use libjte_decide_file_jigdo2() in preference.
     @since 0.1.0
     @param jte_handle  The environment to be used.
     @param filename    The address to be used with fopen(filename, "r")
@@ -289,15 +348,41 @@ int libjte_write_footer(struct libjte_env *jte_handle);
     @param md5         May get filled by MD5 for libjte_write_match_record().
     @return  0= use libjte_write_unmatched(),
              1= use libjte_write_match_record()
-            -1= would have called exit(1) if enabled
+            -1= would have called exit(1) if enabled, e.g. if called
+                after saying "sha256" in
+                libjte_set_checksum_algorithm().
 */
 int libjte_decide_file_jigdo(struct libjte_env *jte_handle,
                              char *filename, off_t size, char **mirror_name,
                              unsigned char md5[16]);
 
+/** Decide whether a data file shall be extracted, i.e. referred in the
+    template file and listed in the jigdo file, or whether its content
+    shall be written compressed into the template file.
+    @since 2.0.0
+    @param jte_handle  The environment to be used.
+    @param filename    The address to be used with fopen(filename, "r")
+    @param size        Number of bytes in the data file
+    @param mirror_name Returns the name which shall be listed in the jigdo
+                       file. This is NULL or allocated memory that has to
+                       be disposed by free(3).
+    @param checksum    May get filled by a checksum for libjte_write_match_record2().
+                       The size of the needed buffer here varies
+                       depending on the checksum chosen in
+                       libjte_set_checksum_algorithm() and is passed
+                       back by that function.
+    @return  0= use libjte_write_unmatched(),
+             1= use libjte_write_match_record()
+            -1= would have called exit(1) if enabled
+*/
+int libjte_decide_file_jigdo2(struct libjte_env *jte_handle,
+			      char *filename, off_t size, char **mirror_name,
+			      unsigned char *checksum);
+
 /** Register a list entry in the jigdo file and write a reference tag into
     the template file. This is to be called if libjte_decide_file_jigdo()
     returned 1.
+    \deprecated since 2.0.0, use libjte_write_match_record2() in preference.
     @since 0.1.0
     @param jte_handle  The environment to be used.
     @param filename    The address to be used with fopen(filename, "r").
@@ -309,14 +394,36 @@ int libjte_decide_file_jigdo(struct libjte_env *jte_handle,
     @param md5         The md5 buffer submitted to libjte_decide_file_jigdo().
     @return >0 = ok
              0 = error
-            -1 = would have called exit(1) if enabled
+            -1 = would have called exit(1) if enabled, e.g. if called
+                 after saying "sha256" in
+                 libjte_set_checksum_algorithm().
 */
 int libjte_write_match_record(struct libjte_env *jte_handle,
-                            char *filename, char *mirror_name, int sector_size,
-                            off_t size, unsigned char md5[16]);
+			      char *filename, char *mirror_name, int sector_size,
+			      off_t size, unsigned char md5[16]);
+
+/** Register a list entry in the jigdo file and write a reference tag into
+    the template file. This is to be called if libjte_decide_file_jigdo()
+    returned 1.
+    @since 2.0.0
+    @param jte_handle  The environment to be used.
+    @param filename    The address to be used with fopen(filename, "r").
+    @param mirror_name The mirror_name returned by libjte_decide_file_jigdo().
+    @param sector_size An eventual byte address alignment which is achieved
+                       in the payload image by padding file ends with zeros.
+                       Submit 1 if no alignment is done. For ISO images: 2048.
+    @param size        The number of bytes in the data file.
+    @param checksum    The checksum buffer submitted to libjte_decide_file_jigdo2().
+    @return >0 = ok
+             0 = error
+            -1 = would have called exit(1) if enabled
+*/
+int libjte_write_match_record2(struct libjte_env *jte_handle,
+			       char *filename, char *mirror_name, int sector_size,
+			       off_t size, unsigned char *checksum);
 
 /** Write a payload data chunk into the template file. This is to be called
-    with any data file bytes if libjte_decide_file_jigdo() returned 0.
+    with any data file bytes if libjte_decide_file_jigdo{,2}() returned 0.
     It is also to be called with any payload image bytes which are not content
     of a data file.
     @since 0.1.0
@@ -331,7 +438,7 @@ int libjte_write_match_record(struct libjte_env *jte_handle,
            -1 = would have called exit(1) if enabled
 */
 int libjte_write_unmatched(struct libjte_env *jte_handle, void *buffer,
-                            int size, int count);
+			   int size, int count);
 
 /** Before calling libjte_footer() submit the number of written payload bytes.
     The Traditional Data File API does not keep track of this count. 

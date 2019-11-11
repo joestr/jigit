@@ -2,6 +2,7 @@
  * libjte_private.h
  *
  * Copyright (c) 2010 Thomas Schmitt <scdbackup@gmx.net>
+ *               2019 Steve McIntyre <steve@einval.com>
  *
  * Environment structure for libjte
  *
@@ -21,9 +22,10 @@ struct  path_mapping;
 struct libjte_env {
     char *outfile;
     int  verbose;
+    int  checksum_algo;
     char *jtemplate_out;
     char *jjigdo_out;
-    char *jmd5_list;
+    char *jchecksum_list;
     FILE *jtjigdo;
     FILE *jttemplate;
     int  jte_min_size;
@@ -43,8 +45,8 @@ struct libjte_env {
     FILE    *j_file;
     int      num_matches;
     int      num_chunks;
-    md5_list_entry_t *md5_list;
-    md5_list_entry_t *md5_last;
+    checksum_list_entry_t *checksum_list;
+    checksum_list_entry_t *checksum_last;
 
     int include_in_jigdo; /* 0= put data blocks into .template, 1= do not */
 

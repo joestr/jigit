@@ -93,7 +93,8 @@ int libjte_new(struct libjte_env **jte_handle, int flag)
         return -1;
     o->jtemplate_out = NULL;
     o->jjigdo_out = NULL;
-    o->jmd5_list = NULL;
+    o->jchecksum_list = NULL;
+    o->checksum_algo = CHECK_MD5;
     o->jtjigdo = NULL;
     o->jttemplate = NULL;
     o->jte_min_size = MIN_JIGDO_FILE_SIZE;
@@ -101,7 +102,7 @@ int libjte_new(struct libjte_env **jte_handle, int flag)
                              CHECK_SHA1_USED | \
                              CHECK_SHA256_USED | \
                              CHECK_SHA512_USED);
-    o->checksum_algo_tmpl = CHECK_MD5_USED;
+    o->checksum_algo_tmpl = (CHECK_MD5_USED | CHECK_SHA256_USED);
     o->jte_template_compression = JTE_TEMP_GZIP;
     o->exclude_list = NULL;
     o->include_list = NULL;
@@ -116,8 +117,8 @@ int libjte_new(struct libjte_env **jte_handle, int flag)
     o->j_file = NULL;
     o->num_matches = 0;
     o->num_chunks = 0;
-    o->md5_list = NULL;
-    o->md5_last = NULL;
+    o->checksum_list = NULL;
+    o->checksum_last = NULL;
     o->include_in_jigdo = 0;
     memset(o->message_buffer, 0, sizeof(o->message_buffer));
     o->error_behavior = 1; /* Print to stderr, do not exit but return -1 */
@@ -139,7 +140,7 @@ int libjte_destroy(struct libjte_env **jte_handle)
     free(o->outfile);
     free(o->jtemplate_out);
     free(o->jjigdo_out);
-    free(o->jmd5_list);
+    free(o->jchecksum_list);
     if (o->jtjigdo != NULL)
         fclose(o->jtjigdo);
     if (o->jttemplate != NULL)
@@ -159,7 +160,7 @@ int libjte_destroy(struct libjte_env **jte_handle)
        o->jttemplate and o->jtjigdo */
 
     libjte_destroy_entry_list(o, 0);
-    libjte_destroy_md5_list(o, 0);
+    libjte_destroy_checksum_list(o, 0);
 
     libjte_clear_msg_list(o, 1 | 2); /* dump pending messages to stderr */
     free(o->uncomp_buf);
@@ -181,6 +182,29 @@ int libjte_set_verbose(struct libjte_env *o, int verbose)
     return 1;
 }
 
+int libjte_set_checksum_algorithm(struct libjte_env *o,
+				  char *algorithm,
+				  int *size)
+{
+    int i = 0;
+    for (i = 0; ; i++)
+    {
+        if (check_algos[i].name == NULL)
+		{
+            sprintf(o->message_buffer,
+                    "libjte: Unknown checksum algorithm %s", algorithm);
+            libjte_add_msg_entry(o, o->message_buffer, 0);
+            return -1;
+		}
+		if (!strcmp(algorithm, check_algos[i].name))
+			break;
+    }
+    o->checksum_algo = i;
+    *size = check_algos[i].raw_bytes;
+    return 1;
+}    
+
+
 int libjte_set_template_path(struct libjte_env *o, char *jtemplate_out)
 {
     return libjte__set_string(&(o->jtemplate_out), jtemplate_out, 0);
@@ -191,9 +215,14 @@ int libjte_set_jigdo_path(struct libjte_env *o, char *jjigdo_out)
     return libjte__set_string(&(o->jjigdo_out), jjigdo_out, 0);
 }
 
-int libjte_set_md5_path(struct libjte_env *o, char *jmd5_list)
+int libjte_set_md5_path(struct libjte_env *o, char *path)
 {
-    return libjte__set_string(&(o->jmd5_list), jmd5_list, 0);
+    return libjte_set_checksum_path(o, path);
+}
+
+int libjte_set_checksum_path(struct libjte_env *o, char *path)
+{
+    return libjte__set_string(&(o->jchecksum_list), path, 0);
 }
 
 int libjte_set_min_size(struct libjte_env *o, int jte_min_size)
@@ -254,6 +283,12 @@ int libjte_set_checksum_iso(struct libjte_env *o, char *checksum_code)
     if (ret <= 0)
         return ret;
     o->checksum_algo_iso = checksum_algo_iso;
+
+    /* Maybe have to override - if we're doing a v2 jigdo file based
+     * around sha256, we always need the sha256 calculated too */
+    if (o->checksum_algo == CHECK_SHA256)
+        o->checksum_algo_iso |= CHECK_SHA256_USED;
+
     return 1;
 }
 
@@ -267,6 +302,12 @@ int libjte_set_checksum_template(struct libjte_env *o, char *checksum_code)
     if (ret <= 0)
         return ret;
     o->checksum_algo_tmpl = checksum_algo_tmpl;
+
+    /* Maybe have to override - if we're doing a v2 jigdo file based
+     * around sha256, we always need the sha256 calculated too */
+    if (o->checksum_algo == CHECK_SHA256)
+        o->checksum_algo_tmpl |= CHECK_SHA256_USED;
+
     return 1;
 }
 
@@ -318,6 +359,14 @@ int libjte_add_md5_demand(struct libjte_env *o, char *pattern)
     return !ret;
 }
 
+int libjte_add_checksum_demand(struct libjte_env *o, char *pattern)
+{
+    int ret;
+
+    ret = jte_add_include(o, pattern);
+    return !ret;
+}
+
 int libjte_add_mapping(struct libjte_env *o, char *arg)
 {
     int ret;
@@ -340,9 +389,9 @@ int libjte_write_header(struct libjte_env *o)
     int ret;
 
     if (o->jtemplate_out == NULL || o->jjigdo_out == NULL ||
-        o->outfile == NULL || o->jmd5_list == NULL) {
+        o->outfile == NULL || o->jchecksum_list == NULL) {
         sprintf(o->message_buffer,
-               "Undefined: template_path, jigdo_path, md5_paths, or outfile.");
+               "Undefined: template_path, jigdo_path, checksum_paths, or outfile.");
         libjte_add_msg_entry(o, o->message_buffer, 0);
         return 0;
     }
@@ -403,8 +452,29 @@ int libjte_write_match_record(struct libjte_env *o,
 {
     int ret;
 
+    if (check_algos[o->checksum_algo].type != CHECK_MD5)
+    {
+        sprintf(o->message_buffer, "Attempted to call libjte_write_match_record() after choosing checksum algorithm '%s'",
+                check_algos[o->checksum_algo].name);
+		libjte_add_msg_entry(o, o->message_buffer, 0);
+        return 0;
+    }
+
     ret = write_jt_match_record(o, filename, mirror_name, sector_size, size,
                                 md5);
+    if (ret <= 0)
+        return ret;
+    return 1;
+}
+
+int libjte_write_match_record2(struct libjte_env *o,
+			       char *filename, char *mirror_name, int sector_size,
+			       off_t size, unsigned char *checksum)
+{
+    int ret;
+
+    ret = write_jt_match_record(o, filename, mirror_name,
+				sector_size, size, checksum);
     if (ret <= 0)
         return ret;
     return 1;
@@ -414,16 +484,31 @@ int libjte_decide_file_jigdo(struct libjte_env *o,
                              char *filename, off_t size, char **mirror_name,
                              unsigned char md5[16])
 {
+    if (check_algos[o->checksum_algo].type != CHECK_MD5)
+    {
+        sprintf(o->message_buffer, "Attempted to call libjte_decide_file_jigdo() after choosing checksum algorithm '%s'",
+                check_algos[o->checksum_algo].name);
+	libjte_add_msg_entry(o, o->message_buffer, 0);
+        return 0;
+    }
+
+    return libjte_decide_file_jigdo2(o, filename, size, mirror_name, md5);
+}
+
+int libjte_decide_file_jigdo2(struct libjte_env *o,
+			      char *filename, off_t size, char **mirror_name,
+			      unsigned char *checksum)
+{
     int ret;
-    char *md5_name;
+    char *checksum_name;
 
     *mirror_name = NULL;
-    ret = list_file_in_jigdo(o, filename, size, &md5_name, md5);
+    ret = list_file_in_jigdo(o, filename, size, &checksum_name, checksum);
     if (ret <= 0)
         return ret;
-    *mirror_name = strdup(md5_name);
+    *mirror_name = strdup(checksum_name);
     if (*mirror_name == NULL) {
-        libjte_report_no_mem(o, strlen(md5_name) + 1, 0);
+        libjte_report_no_mem(o, strlen(checksum_name) + 1, 0);
         return -1;
     }
     return 1;
@@ -436,16 +521,26 @@ int libjte_begin_data_file(struct libjte_env *o, char *filename,
 {
     int ret;
     char *mirror_name;
-    unsigned char md5[16];
+    unsigned char *checksum;
+
+    checksum = calloc(1, check_algos[o->checksum_algo].raw_bytes);
+    if (!checksum)
+		return -1;
 
     o->include_in_jigdo = 0;
-    ret = list_file_in_jigdo(o, filename, size, &mirror_name, md5);
+    ret = list_file_in_jigdo(o, filename, size, &mirror_name, checksum);
     if (ret < 0)
+	{
+		free(checksum);
         return ret;
+	}
     if (ret == 0)
+	{
+		free(checksum);
         return 2;
+	}
     write_jt_match_record(o, filename, mirror_name, sector_size,
-                          size, md5);
+                          size, checksum);
     o->include_in_jigdo = 1;
     return 1;
 }

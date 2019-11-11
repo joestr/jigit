@@ -2,7 +2,7 @@
  * jte.c
  *
  * 
- * Copyright (c) 2004-2006 Steve McIntyre <steve@einval.com>
+ * Copyright (c) 2004-2019 Steve McIntyre <steve@einval.com>
  * Copyright (c) 2010-2011 Thomas Schmitt <scdbackup@gmx.net>
  * Copyright (c) 2010-2011 George Danchev <danchev@spnet.net>
  * 
@@ -11,6 +11,7 @@
  * More recently few tweaks and additions were applied by 
  * Thomas Schmitt <scdbackup@gmx.net> and
  * George Danchev <danchev@spnet.net>
+ * Updated by Steve to add more generic checksum support, first for sha256
  * 
  * Implementation of the Jigdo Template Engine - make jigdo files
  * directly when making ISO images
@@ -48,7 +49,6 @@
 #include "checksum.h"
 #include "endianconv.h"
 #include "rsync.h"
-#include "md5.h"
 #include "libjte_private.h"
 #include "libjte.h"
 
@@ -58,15 +58,29 @@
 #define JTET_FILE_MATCH 1
 #define JTET_NOMATCH    2
 
-#define JTE_VER_MAJOR     0x0001
-#define JTE_VER_MINOR     0x0013
+#define JTE_VER_MAJOR     0x0002
+#define JTE_VER_MINOR     0x0000
 #define JTE_NAME          "JTE"
 #define JTE_COMMENT       "JTE at http://www.einval.com/~steve/software/JTE/ ; jigdo at http://atterer.org/jigdo/"
 
-#define JIGDO_TEMPLATE_VERSION "1.1"
+#define JIGDO_TEMPLATE_VERSION_MD5    "1.1"
+#define JIGDO_TEMPLATE_VERSION_SHA256 "2.0"
 
 #define JTE_MAX_ERROR_LIST_LENGTH 20
 
+/* The various type of jigdo descriptor */
+enum _jigdo_desc_type {
+	JDT_OBSOLETE_IMAGE_INFO = 1,
+    JDT_UNMATCHED_DATA = 2,
+    JDT_OBSOLETE_MATCHED_FILE = 3,
+    JDT_OBSOLETE_WRITTEN_FILE = 4,
+    JDT_IMAGE_INFO_MD5 = 5,
+    JDT_MATCHED_FILE_MD5 = 6,
+    JDT_WRITTEN_FILE_MD5 = 7,
+    JDT_IMAGE_INFO_SHA256 = 8,
+    JDT_MATCHED_FILE_SHA256 = 9,
+    JDT_WRITTEN_FILE_SHA256 = 10
+};
 
 /* Grab the file component from a full path */
 static char *file_base_name(char *path)
@@ -211,11 +225,11 @@ int libjte_destroy_entry_list(struct libjte_env *o, int flag)
     return 1;
 }
 
-/* Check if a file has to be MD5-matched to be valid. If we get called
-   here, we've failed to match any of the MD5 entries we were
+/* Check if a file has to be checksum-matched to be valid. If we get called
+   here, we've failed to match any of the checksum entries we were
    given. If the path to the filename matches one of the paths in our
    list, clearly it must have been corrupted. Abort with an error. */
-static int check_md5_file_match(struct libjte_env *o, char *filename)
+static int check_checksum_file_match(struct libjte_env *o, char *filename)
 {
     struct path_match *ptr = o->include_list;
     regmatch_t pmatch[1];
@@ -224,13 +238,13 @@ static int check_md5_file_match(struct libjte_env *o, char *filename)
     {
         if (!regexec(&ptr->match_pattern, filename, 1, pmatch, 0))
         {
-			sprintf(o->message_buffer,
-				"File %1.1024s should have matched an MD5 entry, but didn't! (Rule '%1.1024s')",
-				filename, ptr->match_rule);
-			libjte_add_msg_entry(o, o->message_buffer, 0);
-			exit_if_enabled(o, 1);
-			return -1;
-	}
+            sprintf(o->message_buffer,
+                "File %1.1024s should have matched a checksum entry, but didn't! (Rule '%1.1024s')",
+                filename, ptr->match_rule);
+            libjte_add_msg_entry(o, o->message_buffer, 0);
+            exit_if_enabled(o, 1);
+            return -1;
+    }
         ptr = ptr->next;
     }
     return 0;
@@ -247,21 +261,22 @@ static int check_md5_file_match(struct libjte_env *o, char *filename)
       can avoid it.      
 
    3. Files living in specified paths *must* match an entry in the
-      md5-list, or they must have been corrupted. If we find a corrupt
-      file, bail out with an error.
+      checksum-list, or they must have been corrupted. If we find a
+      corrupt file, bail out with an error.
 
 */
 int list_file_in_jigdo(struct libjte_env *o,
-            char *filename, off_t size, char **realname, unsigned char md5[16])
+                       char *filename, off_t size,
+                       char **realname, unsigned char *checksum)
 {
     char *matched_rule;
-    md5_list_entry_t *entry = o->md5_list;
-    int md5sum_done = 0, ret;
+    checksum_list_entry_t *entry = o->checksum_list;
+    int checksum_done = 0, ret;
     
     if (o->jtemplate_out == NULL)
         return 0;
 
-    memset(md5, 0, 16);
+    memset(checksum, 0, check_algos[o->checksum_algo].raw_bytes);
 
     /* Cheaper to check file size first */
     if (size < o->jte_min_size)
@@ -286,11 +301,11 @@ int list_file_in_jigdo(struct libjte_env *o,
         return 0;
     }
 
-    /* Check to see if the file is in our md5 list. Check three things:
+    /* Check to see if the file is in our checksum list. Check three things:
        
        1. the size
        2. the filename
-       3. (only if the first 2 match) the md5sum
+       3. (only if the first 2 match) the checksum
 
        If we get a match for all three, include the file and return
        the full path to the file that we have gleaned from the mirror.
@@ -298,13 +313,14 @@ int list_file_in_jigdo(struct libjte_env *o,
 
     while (entry)
     {
-        if (size == entry->size)
+        if (size == (off_t)entry->size)
         {
             if (!strcmp(file_base_name(filename), file_base_name(entry->filename)))
             {
-                if (!md5sum_done)
+                if (!checksum_done)
                 {
-                    ret = calculate_md5sum(filename, size, md5);
+                    ret = checksum_calculate(filename, size,
+                                             checksum, check_algos[o->checksum_algo].type);
                     if (ret < 0) { /* (0 is success) */
                         sprintf(o->message_buffer,
                                 "Error with file '%1.1024s' : errno=%d",
@@ -312,9 +328,9 @@ int list_file_in_jigdo(struct libjte_env *o,
                         libjte_add_msg_entry(o, o->message_buffer, 0);
                         return -1;
                     }
-                    md5sum_done = 1;
+                    checksum_done = 1;
                 }
-                if (!memcmp(md5, entry->MD5, sizeof(entry->MD5)))
+                if (!memcmp(checksum, entry->checksum, check_algos[o->checksum_algo].raw_bytes))
                 {
                     *realname = entry->filename;
                     return 1;
@@ -324,9 +340,9 @@ int list_file_in_jigdo(struct libjte_env *o,
         entry = entry->next;
     }
 
-    /* We haven't found an entry in our MD5 list to match this
+    /* We haven't found an entry in our checksum list to match this
      * file. If we should have done, complain and bail out. */
-    ret = check_md5_file_match(o, filename);
+    ret = check_checksum_file_match(o, filename);
     return ret;
 }
 
@@ -442,7 +458,7 @@ static char *remap_filename(struct libjte_env *o, char *filename)
     return strdup(filename);
 }    
 
-/* Write data to the template file and update the MD5 sum */
+/* Write data to the template file and update the checksum */
 static int template_fwrite(struct libjte_env *o,
                       const void *ptr, size_t size, size_t nmemb, FILE *stream)
 {
@@ -490,9 +506,14 @@ static int write_template_header(struct libjte_env *o)
         return -1;
     }
     
-    i += sprintf(p, "JigsawDownload template %s libjte-%d.%d.%d \r\n",
-             JIGDO_TEMPLATE_VERSION, 
-             LIBJTE_VERSION_MAJOR, LIBJTE_VERSION_MINOR, LIBJTE_VERSION_MICRO);
+    if (CHECK_MD5 == check_algos[o->checksum_algo].type)
+        i += sprintf(p, "JigsawDownload template %s libjte-%d.%d.%d \r\n",
+                     JIGDO_TEMPLATE_VERSION_MD5, 
+                     LIBJTE_VERSION_MAJOR, LIBJTE_VERSION_MINOR, LIBJTE_VERSION_MICRO);
+    else /* CHECK_SHA256 */
+        i += sprintf(p, "JigsawDownload template %s libjte-%d.%d.%d \r\n",
+                     JIGDO_TEMPLATE_VERSION_SHA256, 
+                     LIBJTE_VERSION_MAJOR, LIBJTE_VERSION_MINOR, LIBJTE_VERSION_MICRO);
     p = &buf[i];
 
     i += sprintf(p, "%s \r\n", JTE_COMMENT);
@@ -504,40 +525,57 @@ static int write_template_header(struct libjte_env *o)
     return 1;
 }
 
-/* Read the MD5 list and build a list in memory for us to use later */
-static void add_md5_entry(struct libjte_env *o,
-                   unsigned char *md5, uint64_t size, char *filename)
+/* Read the checksum list and build a list in memory for us to use later */
+static int add_checksum_entry(struct libjte_env *o,
+                              unsigned char *checksum, uint64_t size,
+                              char *filename)
 {
-    md5_list_entry_t *new = NULL;
+    checksum_list_entry_t *new = NULL;
     
-    new = calloc(1, sizeof(md5_list_entry_t));
-    memcpy(new->MD5, md5, sizeof(new->MD5));
+    new = calloc(1, sizeof(checksum_list_entry_t));
+    if (!new)
+        return ENOMEM;
+    new->checksum = calloc(1, check_algos[o->checksum_algo].raw_bytes);
+    if (!new->checksum)
+    {
+        free(new);
+        return ENOMEM;
+    }
+    memcpy(new->checksum, checksum, check_algos[o->checksum_algo].raw_bytes);
     new->size = size;
     new->filename = strdup(filename);
+    if (!new->filename)
+    {
+        free(new->checksum);
+        free(new);
+        return ENOMEM;
+    }
     
     /* Add to the end of the list */
-    if (NULL == o->md5_last)
+    if (NULL == o->checksum_last)
     {
-        o->md5_last = new;
-        o->md5_list = new;
+        o->checksum_last = new;
+        o->checksum_list = new;
     }
     else
     {
-        o->md5_last->next = new;
-        o->md5_last = new;
+        o->checksum_last->next = new;
+        o->checksum_last = new;
     }
+    return 0;
 }
 
-int libjte_destroy_md5_list(struct libjte_env *o, int flag)
+int libjte_destroy_checksum_list(struct libjte_env *o, int flag)
 {
-    md5_list_entry_t *s, *s_next;
+    checksum_list_entry_t *s, *s_next;
 
-    for (s = o->md5_list; s != NULL; s = s_next) {
+    for (s = o->checksum_list; s != NULL; s = s_next) {
         s_next = s->next;
+        free(s->checksum);
         free(s->filename);
         free(s);
     }
-    o->md5_list = o->md5_last = NULL;
+    o->checksum_list = o->checksum_last = NULL;
     return 1;
 }
 
@@ -557,60 +595,142 @@ static uint64_t parse_number(unsigned char in[12])
     return size;
 }
     
-/* Read the MD5 list and build a list in memory for us to use later
-   MD5 list format:
+/* Read the checksum list and build a list in memory for us to use later
+   list format:
 
-   <---MD5--->  <--Size-->  <--Filename-->
-       32          12          remaining
+   <---checksum--->  <--Size-->  <--Filename-->
+    XX                12          remaining
+
+    We know XX (length of the checksum in hex) from the specified
+    checksum type in our env. We explicitly check here that the
+    entries are well-formed
 */
-static int parse_md5_list(struct libjte_env *o)
+static int parse_checksum_list(struct libjte_env *o)
 {
-    FILE *md5_file = NULL;
+    FILE *checksum_file = NULL;
     unsigned char buf[1024];
-    unsigned char md5[16];
+    unsigned char *checksum;
     char *filename = NULL;
     unsigned char *numbuf = NULL;
     int num_files = 0;
     uint64_t size = 0;
+    int i = 0;
+    int valid = 1;
+    int error = 0;
+    int csum_hex_size = check_algos[o->checksum_algo].hex_bytes;
 
-    md5_file = fopen(o->jmd5_list, "rb");
-    if (!md5_file)
+    if (!strcmp (o->jchecksum_list, "/dev/null"))
     {
-        sprintf(o->message_buffer, "cannot read from MD5 list file '%1.1024s'",
-                o->jmd5_list);
+        if (o->verbose)
+        {
+            sprintf(o->message_buffer, "Ignoring call with checksum list file '%1.1024s'",
+                    o->jchecksum_list);
+            libjte_add_msg_entry(o, o->message_buffer, 0);
+        }
+        return 1;
+    }
+
+    checksum = calloc(1, check_algos[o->checksum_algo].raw_bytes);
+    if (!checksum)
+    {
+        sprintf(o->message_buffer, "cannot allocate memory to read from checksum list file '%1.1024s'",
+                o->jchecksum_list);
+        libjte_add_msg_entry(o, o->message_buffer, 0);
+        exit_if_enabled(o, 1);
+        errno = ENOMEM;
+        return -1;
+    }
+
+    checksum_file = fopen(o->jchecksum_list, "rb");
+    if (!checksum_file)
+    {
+        sprintf(o->message_buffer, "cannot open checksum list file '%1.1024s'",
+                o->jchecksum_list);
         libjte_add_msg_entry(o, o->message_buffer, 0);
         exit_if_enabled(o, 1);
         return -1;
     }
 
+    /* Validate the first line - is it using the right checksum
+     * type? */
     memset(buf, 0, sizeof(buf));
-    while (fgets((char *)buf, sizeof(buf), md5_file))
+    if(!fgets((char *)buf, sizeof(buf), checksum_file))
     {
-        numbuf = &buf[34];
-        filename = (char *)&buf[48];
+        free(checksum);
+        fclose(checksum_file);
+        sprintf(o->message_buffer, "cannot read from checksum list file '%1.1024s'",
+                o->jchecksum_list);
+        libjte_add_msg_entry(o, o->message_buffer, 0);
+        exit_if_enabled(o, 1);
+        return -1;
+    }
+
+    /* Check that we have hex digits for just the right number of
+     * characters, followed by two spaces */
+    for (i = 0; valid && i < csum_hex_size; i++)
+        if (!isxdigit(buf[i]))
+            valid = -i;
+    if (valid > 0) {
+        if (' ' != buf[csum_hex_size])
+            valid = -csum_hex_size;
+        if (' ' != buf[csum_hex_size+1])
+            valid = -csum_hex_size - 1;
+    }
+    if(valid <= 0)
+    {
+        free(checksum);
+        fclose(checksum_file);
+        sprintf(o->message_buffer, "invalid checksum list file '%1.1024s' - wrong checksum type?",
+                o->jchecksum_list);
+        libjte_add_msg_entry(o, o->message_buffer, 0);
+        exit_if_enabled(o, 1);
+        return -1;
+    }
+
+    fseek(checksum_file, 0, SEEK_SET);
+    memset(buf, 0, sizeof(buf));
+    while (fgets((char *)buf, sizeof(buf), checksum_file))
+    {
+        numbuf = &buf[csum_hex_size + 2];
+        filename = (char *)&buf[csum_hex_size + 16];
         /* Lose the trailing \n from the fgets() call */
         if (buf[strlen((char *)buf)-1] == '\n')
-	  buf[strlen((char *)buf)-1] = 0;
+            buf[strlen((char *)buf)-1] = 0;
 
-        if (mk_MD5Parse(buf, md5))
+        if (checksum_parse_hex((char *)buf, checksum, csum_hex_size))
         {
-            sprintf(o->message_buffer, "cannot parse MD5 file '%1.1024s'",
-                    o->jmd5_list);
+            free(checksum);
+            fclose(checksum_file);
+            sprintf(o->message_buffer, "cannot parse checksum file '%1.1024s'",
+                    o->jchecksum_list);
             libjte_add_msg_entry(o, o->message_buffer, 0);
             exit_if_enabled(o, 1);
             return -1;
         }
         size = parse_number(numbuf);
-        add_md5_entry(o, md5, size, filename);
+
+        error = add_checksum_entry(o, checksum, size, filename);
+        if (error)
+        {
+            free(checksum);
+            fclose(checksum_file);
+            sprintf(o->message_buffer, "cannot add checksum entry to list from file '%1.1024s', error %d",
+                    o->jchecksum_list, error);
+            libjte_add_msg_entry(o, o->message_buffer, 0);
+            exit_if_enabled(o, 1);
+            return -1;
+        }
+
         memset(buf, 0, sizeof(buf));
         num_files++;
     }
     if (o->verbose > 0) {
         sprintf(o->message_buffer,
-              "parse_md5_list: added MD5 checksums for %d files", num_files);
+              "parse_checksum_list: added checksums for %d files", num_files);
         libjte_add_msg_entry(o, o->message_buffer, 0);
     }
-    fclose(md5_file);
+    free(checksum);
+    fclose(checksum_file);
     return 1;
 }
 
@@ -640,9 +760,9 @@ int write_jt_header(struct libjte_env *o,
     if (ret <= 0)
         return ret;
 
-    /* Load up the MD5 list if we've been given one */
-    if (o->jmd5_list) {
-        ret = parse_md5_list(o);
+    /* Load up the checksum list if we've been given one */
+    if (o->jchecksum_list) {
+        ret = parse_checksum_list(o);
         if (ret <= 0)
             return ret;
     }
@@ -849,23 +969,23 @@ static int write_compressed_chunk(struct libjte_env *o,
 {
     int ret;
 
-	if (o->uncomp_buf == NULL)
-	{
-		if (o->jte_template_compression == JTE_TEMP_BZIP2)
-			o->uncomp_size = 900 * 1024;
-		else
-			o->uncomp_size = 1024 * 1024;
-		o->uncomp_buf = malloc(o->uncomp_size);
-		if (o->uncomp_buf == NULL)
-		{
+    if (o->uncomp_buf == NULL)
+    {
+        if (o->jte_template_compression == JTE_TEMP_BZIP2)
+            o->uncomp_size = 900 * 1024;
+        else
+            o->uncomp_size = 1024 * 1024;
+        o->uncomp_buf = malloc(o->uncomp_size);
+        if (o->uncomp_buf == NULL)
+        {
                    sprintf(o->message_buffer,
                 "failed to allocate %lu bytes for template compression buffer",
                            (unsigned long) o->uncomp_size);
                    libjte_add_msg_entry(o, o->message_buffer, 0);
                    exit_if_enabled(o, 1);
                    return -1;
-		}
-	}
+        }
+    }
 
     if ((o->uncomp_buf_used + size) > o->uncomp_size)
     {
@@ -906,13 +1026,22 @@ static int write_template_desc_entries(struct libjte_env *o, off_t image_len)
     entry_t *entry = o->entry_list;
     off_t desc_len = 0;
     unsigned char out_len[6];
-    jigdo_image_entry_t jimage;
     int ret;
 
-    desc_len = 16 /* DESC + length twice */
-        + (sizeof(jigdo_file_entry_t) * o->num_matches)
-        + (sizeof(jigdo_chunk_entry_t) * o->num_chunks)
-        + sizeof(jigdo_image_entry_t);
+    if (CHECK_MD5 == check_algos[o->checksum_algo].type)
+    {
+        desc_len = 16 /* DESC + length twice */
+            + (sizeof(jigdo_file_entry_md5_t) * o->num_matches)
+            + (sizeof(jigdo_chunk_entry_t) * o->num_chunks)
+            + sizeof(jigdo_image_entry_md5_t);
+    }
+    else /* CHECK_SHA256 */
+    {
+        desc_len = 16 /* DESC + length twice */
+            + (sizeof(jigdo_file_entry_sha256_t) * o->num_matches)
+            + (sizeof(jigdo_chunk_entry_t) * o->num_chunks)
+            + sizeof(jigdo_image_entry_sha256_t);
+    }
 
     write_le48(desc_len, &out_len[0]);
     ret = write_compressed_chunk(o, NULL, 0);
@@ -929,20 +1058,34 @@ static int write_template_desc_entries(struct libjte_env *o, off_t image_len)
         {
             case JTET_FILE_MATCH:
             {
-                jigdo_file_entry_t jfile;
-                jfile.type = 6; /* Matched file */
-                write_le48(entry->data.file.file_length, &jfile.fileLen[0]);
-                write_le64(entry->data.file.rsyncsum, &jfile.fileRsync[0]);
-                memcpy(jfile.fileMD5, entry->data.file.md5, sizeof(jfile.fileMD5));
-                if (template_fwrite(o, &jfile, sizeof(jfile), 1,
-                                    o->t_file) <= 0)
-                    return 0;
+                if (CHECK_MD5 == check_algos[o->checksum_algo].type)
+                {
+                    jigdo_file_entry_md5_t jfile;
+                    jfile.type = JDT_MATCHED_FILE_MD5;
+                    write_le48(entry->data.file.file_length, &jfile.fileLen[0]);
+                    write_le64(entry->data.file.rsyncsum, &jfile.fileRsync[0]);
+                    memcpy(jfile.fileMD5, entry->data.file.checksum, sizeof(jfile.fileMD5));
+                    if (template_fwrite(o, &jfile, sizeof(jfile), 1,
+                                        o->t_file) <= 0)
+                        return 0;
+                }
+                else /* CHECK_SHA256 */
+                {
+                    jigdo_file_entry_sha256_t jfile;
+                    jfile.type = JDT_MATCHED_FILE_SHA256;
+                    write_le48(entry->data.file.file_length, &jfile.fileLen[0]);
+                    write_le64(entry->data.file.rsyncsum, &jfile.fileRsync[0]);
+                    memcpy(jfile.fileSHA256, entry->data.file.checksum, sizeof(jfile.fileSHA256));
+                    if (template_fwrite(o, &jfile, sizeof(jfile), 1,
+                                        o->t_file) <= 0)
+                        return 0;
+                }
                 break;
             }
             case JTET_NOMATCH:
             {
                 jigdo_chunk_entry_t jchunk;
-				jchunk.type = 2; /* Raw data, compressed */
+                jchunk.type = JDT_UNMATCHED_DATA;
                 write_le48(entry->data.chunk.uncompressed_length, &jchunk.skipLen[0]);
                 if (template_fwrite(o, &jchunk, sizeof(jchunk), 1,
                                     o->t_file) <= 0)
@@ -953,12 +1096,27 @@ static int write_template_desc_entries(struct libjte_env *o, off_t image_len)
         entry = entry->next;
     }
 
-    jimage.type = 5;
-    write_le48(image_len, &jimage.imageLen[0]);
-    checksum_copy(o->iso_context, CHECK_MD5, &jimage.imageMD5[0]);
-    write_le32(MIN_JIGDO_FILE_SIZE, &jimage.blockLen[0]);
-    if (template_fwrite(o, &jimage, sizeof(jimage), 1, o->t_file) <= 0)
-        return 0;
+    if (CHECK_MD5 == check_algos[o->checksum_algo].type)
+    {
+        jigdo_image_entry_md5_t jimage;
+        jimage.type = JDT_IMAGE_INFO_MD5;
+        write_le48(image_len, &jimage.imageLen[0]);
+        checksum_copy(o->iso_context, CHECK_MD5, &jimage.imageMD5[0]);
+        write_le32(MIN_JIGDO_FILE_SIZE, &jimage.blockLen[0]);
+        if (template_fwrite(o, &jimage, sizeof(jimage), 1, o->t_file) <= 0)
+            return 0;
+    }
+    else /* CHECK_SHA256 */
+    {
+        jigdo_image_entry_sha256_t jimage;
+        jimage.type = JDT_IMAGE_INFO_SHA256;
+        write_le48(image_len, &jimage.imageLen[0]);
+        checksum_copy(o->iso_context, CHECK_SHA256, &jimage.imageSHA256[0]);
+        write_le32(MIN_JIGDO_FILE_SIZE, &jimage.blockLen[0]);
+        if (template_fwrite(o, &jimage, sizeof(jimage), 1, o->t_file) <= 0)
+            return 0;
+    }
+        
     if(template_fwrite(o, out_len, sizeof(out_len), 1, o->t_file) <= 0)
         return 0;
     return 1;
@@ -1032,22 +1190,36 @@ static char *uint64_to_dec(uint64_t num, char dec[40])
 /* Write the .jigdo file to match the .template we've just finished. */
 static int write_jigdo_file(struct libjte_env *o)
 {
-    unsigned char template_md5sum[16];
+    unsigned char *template_checksum;
     entry_t *entry = o->entry_list;
     int i = 0;
     struct checksum_info *info = NULL;
     FILE *j_file = o->j_file;
     char *b64, dec[40];
+    
+    template_checksum = calloc(1, check_algos[o->checksum_algo].raw_bytes);
+    if (!template_checksum)
+    {
+        sprintf(o->message_buffer,
+                "write_jigdo_file: Out of memory for buffer size %d",
+                check_algos[o->checksum_algo].raw_bytes);
+        libjte_add_msg_entry(o, o->message_buffer, 0);
+        exit_if_enabled(o, 1);
+        return -1;
+    }
 
     checksum_final(o->template_context);
-    checksum_copy(o->template_context, CHECK_MD5, &template_md5sum[0]);
+    checksum_copy(o->template_context, check_algos[o->checksum_algo].type, &template_checksum[0]);
 
     fprintf(j_file, "# JigsawDownload\n");
     fprintf(j_file, "# See <http://atterer.org/jigdo/> for details about jigdo\n");
     fprintf(j_file, "# See <http://www.einval.com/~steve/software/CD/JTE/> for details about JTE\n\n");
     
     fprintf(j_file, "[Jigdo]\n");
-    fprintf(j_file, "Version=%s\n", JIGDO_TEMPLATE_VERSION);
+    if (CHECK_MD5 == check_algos[o->checksum_algo].type)
+        fprintf(j_file, "Version=%s\n", JIGDO_TEMPLATE_VERSION_MD5);
+    else /* CHECK_SHA256 */
+        fprintf(j_file, "Version=%s\n", JIGDO_TEMPLATE_VERSION_SHA256);
     fprintf(j_file, "Generator=libjte-%d.%d.%d\n\n",
             LIBJTE_VERSION_MAJOR, LIBJTE_VERSION_MINOR, LIBJTE_VERSION_MICRO);
 
@@ -1055,12 +1227,16 @@ static int write_jigdo_file(struct libjte_env *o)
     fprintf(j_file, "Filename=%s\n", file_base_name(o->outfile));
     fprintf(j_file, "Template=http://localhost/%s\n", o->jtemplate_out);
 
-    b64 = base64_dump(o, &template_md5sum[0], sizeof(template_md5sum));
+    b64 = base64_dump(o, &template_checksum[0], check_algos[o->checksum_algo].raw_bytes);
     if (b64 == NULL)
         return -1;
-    fprintf(j_file, "Template-MD5Sum=%s \n", b64);
-    free(b64);
 
+    if (CHECK_MD5 == check_algos[o->checksum_algo].type)
+        fprintf(j_file, "Template-MD5Sum=%s \n", b64);
+    else /* CHECK_SHA256 */
+        fprintf(j_file, "Template-SHA256Sum=%s \n", b64);
+    free(b64);
+    
     for (i = 0; i < NUM_CHECKSUMS; i++)
     {
         if (o->checksum_algo_tmpl & (1 << i))
@@ -1095,8 +1271,7 @@ static int write_jigdo_file(struct libjte_env *o)
 
             if (new_name == NULL)
                 return -1;
-            b64 = base64_dump(o, &entry->data.file.md5[0],
-                              sizeof(entry->data.file.md5));
+            b64 = base64_dump(o, entry->data.file.checksum, check_algos[o->checksum_algo].raw_bytes);
             if (b64 == NULL)
                 return -1;
             fprintf(j_file, "%s=%s\n", b64, new_name);
@@ -1164,7 +1339,7 @@ static void add_unmatched_entry(struct libjte_env *o, int uncompressed_length)
 
 /* Add a file match entry to the list of extents */
 static void add_file_entry(struct libjte_env *o,
-                           char *filename, off_t size, unsigned char *md5,
+                           char *filename, off_t size, unsigned char *checksum,
                            uint64_t rsyncsum)
 {
     entry_t *new_entry = NULL;
@@ -1172,7 +1347,8 @@ static void add_file_entry(struct libjte_env *o,
     new_entry = calloc(1, sizeof(entry_t));
     new_entry->entry_type = JTET_FILE_MATCH;
     new_entry->next = NULL;
-    memcpy(new_entry->data.file.md5, md5, sizeof(new_entry->data.file.md5));
+    new_entry->data.file.checksum = calloc(1, check_algos[o->checksum_algo].raw_bytes);
+    memcpy(new_entry->data.file.checksum, checksum, check_algos[o->checksum_algo].raw_bytes);
     new_entry->data.file.file_length = size;
     new_entry->data.file.rsyncsum = rsyncsum;
     new_entry->data.file.filename = strdup(filename);
@@ -1217,48 +1393,48 @@ int jtwrite(struct libjte_env *o, void *buffer, int size, int count)
 
 /* Cope with a file entry in the .iso file:
 
-   1. Read the file for the image's md5 checksum
+   1. Read the file for the image's checksum
    2. Add an entry in our list of files to be written into the .jigdo later
 */
 int write_jt_match_record(struct libjte_env *o,
                            char *filename, char *mirror_name, int sector_size,
-                           off_t size, unsigned char md5[16])
+                           off_t size, unsigned char *checksum)
 {
     char                buf[32768];
     off_t               remain = size;
-	FILE               *infile = NULL;
-	int	                use = 0;
-    uint64_t  rsync64_sum = 0;
-    int first_block = 1;
+    FILE               *infile = NULL;
+    int                 use = 0;
+    uint64_t            rsync64_sum = 0;
+    int                 first_block = 1;
 
     memset(buf, 0, sizeof(buf));
 
     if ((infile = fopen(filename, "rb")) == NULL) {
-#ifndef	HAVE_STRERROR
-		sprintf(o->message_buffer, "cannot open '%s': (%d)",
-				filename, errno);
+#ifndef HAVE_STRERROR
+        sprintf(o->message_buffer, "cannot open '%s': (%d)",
+                filename, errno);
 #else
-		sprintf(o->message_buffer, "cannot open '%s': %s",
-				filename, strerror(errno));
+        sprintf(o->message_buffer, "cannot open '%s': %s",
+                filename, strerror(errno));
 #endif
                 libjte_add_msg_entry(o, o->message_buffer, 0);
-		exit_if_enabled(o, 1);
-		return -1;
-	}
+        exit_if_enabled(o, 1);
+        return -1;
+    }
 
     while (remain > 0)
     {
         use = remain;
-        if (remain > sizeof(buf))
+        if (remain > (off_t)sizeof(buf))
             use = sizeof(buf);
-		if (fread(buf, 1, use, infile) == 0)
+        if (fread(buf, 1, use, infile) == 0)
         {
-			sprintf(o->message_buffer,
+            sprintf(o->message_buffer,
                                 "cannot read from '%s'", filename);
                         libjte_add_msg_entry(o, o->message_buffer, 0);
-			exit_if_enabled(o, 1);
-			return -1;
-	}
+            exit_if_enabled(o, 1);
+            return -1;
+    }
         if (first_block)
             rsync64_sum = rsync64((unsigned char *) buf, MIN_JIGDO_FILE_SIZE);
         checksum_update(o->iso_context, (unsigned char *) buf, use);
@@ -1276,7 +1452,7 @@ int write_jt_match_record(struct libjte_env *o,
         checksum_update(o->iso_context, (unsigned char *) buf, pad_size);
     }
 
-    add_file_entry(o, mirror_name, size, &md5[0], rsync64_sum);
+    add_file_entry(o, mirror_name, size, &checksum[0], rsync64_sum);
     if (size % sector_size)
     {
         int pad_size = sector_size - (size % sector_size);

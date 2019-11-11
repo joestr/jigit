@@ -19,6 +19,7 @@ struct libjte_env;
 #include <stdio.h>
 #include <unistd.h>
 #include <regex.h>
+#include "checksum.h"
 
 typedef int BOOL;
 
@@ -30,10 +31,10 @@ extern int jtwrite(struct libjte_env *o,
                             void *buffer, int size, int count);
 extern int write_jt_match_record(struct libjte_env *o,
                             char *filename, char *mirror_name, int sector_size,
-                            off_t size, unsigned char md5[16]);
+                            off_t size, unsigned char *checksum);
 extern int  list_file_in_jigdo(struct libjte_env *o,
                             char *filename, off_t size, char **realname,
-                            unsigned char md5[16]);
+                            unsigned char *checksum);
 extern int  jte_add_exclude(struct libjte_env *o, char *pattern);
 extern int  jte_add_include(struct libjte_env *o, char *pattern);
 extern int  jte_add_mapping(struct libjte_env *o, char *arg);
@@ -41,7 +42,7 @@ extern int  jte_add_mapping(struct libjte_env *o, char *arg);
 int libjte_destroy_path_match_list(struct libjte_env *o, int flag);
 int libjte_destroy_path_mapping(struct libjte_env *o, int flag);
 int libjte_destroy_entry_list(struct libjte_env *o, int flag);
-int libjte_destroy_md5_list(struct libjte_env *o, int flag);
+int libjte_destroy_checksum_list(struct libjte_env *o, int flag);
 
 int libjte_report_no_mem(struct libjte_env *o, size_t size, int flag);
 
@@ -52,7 +53,54 @@ typedef enum _jtc_e
     JTE_TEMP_BZIP2
 } jtc_t;
 
+struct _checksum_data
+{
+    enum checksum_types type;
+    char *name;      /* the name of the checksum algorithm */
+    int   raw_bytes; /* how many bytes needed to store the raw
+		      * checksum */
+    int   hex_bytes; /* how many chars needed to store it as a hex
+		      * string, *not including* the NULL terminator */
+    int   b64_bytes; /* how many chars needed to store it as a base64
+		      * string, *not including* the NULL terminator */
+};
 
+#define ROUND_UP(N, S)      ((((N) + (S) - 1) / (S)) * (S))
+
+#define MD5_BITS            128
+#define MD5_BYTES           (MD5_BITS / 8)
+#define HEX_MD5_BYTES       (MD5_BITS / 4)
+#define BASE64_MD5_BYTES    ((ROUND_UP (MD5_BITS, 6)) / 6)
+
+#define SHA256_BITS         256
+#define SHA256_BYTES        (SHA256_BITS / 8)
+#define HEX_SHA256_BYTES    (SHA256_BITS / 4)
+#define BASE64_SHA256_BYTES ((ROUND_UP (SHA256_BITS, 6)) / 6)
+
+static const struct _checksum_data check_algos[] = 
+{
+    {
+		CHECK_MD5,
+		"md5",
+		MD5_BYTES,
+		HEX_MD5_BYTES,
+		BASE64_MD5_BYTES
+	},
+    {
+		CHECK_SHA256,
+		"sha256",
+		SHA256_BYTES,
+		HEX_SHA256_BYTES,
+		BASE64_SHA256_BYTES
+	},
+    {
+		NUM_CHECKSUMS,
+		NULL,
+		0,
+		0,
+		0
+	}
+};
 
 #define MIN_JIGDO_FILE_SIZE 1024
 
@@ -80,7 +128,7 @@ struct path_mapping
    jigdo files */
 typedef struct _file_entry
 {
-    unsigned char       md5[16];
+    unsigned char      *checksum;
     off_t               file_length;
     uint64_t            rsyncsum;
     char               *filename;
@@ -102,13 +150,21 @@ typedef struct _entry
     } data;
 } entry_t;
 
-typedef struct _jigdo_file_entry
+typedef struct _jigdo_file_entry_md5
 {
     unsigned char type;
     unsigned char fileLen[6];
     unsigned char fileRsync[8];
-    unsigned char fileMD5[16];
-} jigdo_file_entry_t;
+    unsigned char fileMD5[MD5_BYTES];
+} jigdo_file_entry_md5_t;
+
+typedef struct _jigdo_file_entry_sha256
+{
+    unsigned char type;
+    unsigned char fileLen[6];
+    unsigned char fileRsync[8];
+    unsigned char fileSHA256[SHA256_BYTES];
+} jigdo_file_entry_sha256_t;
 
 typedef struct _jigdo_chunk_entry
 {
@@ -116,21 +172,29 @@ typedef struct _jigdo_chunk_entry
     unsigned char skipLen[6];
 } jigdo_chunk_entry_t;
 
-typedef struct _jigdo_image_entry
+typedef struct _jigdo_image_entry_md5
 {
     unsigned char type;
     unsigned char imageLen[6];
-    unsigned char imageMD5[16];
+    unsigned char imageMD5[MD5_BYTES];
     unsigned char blockLen[4];
-} jigdo_image_entry_t;
+} jigdo_image_entry_md5_t;
 
-typedef struct _md5_list_entry
+typedef struct _jigdo_image_entry_sha256
 {
-    struct _md5_list_entry *next;
-    unsigned char       MD5[16];
-    uint64_t size;
+    unsigned char type;
+    unsigned char imageLen[6];
+    unsigned char imageSHA256[SHA256_BYTES];
+    unsigned char blockLen[4];
+} jigdo_image_entry_sha256_t;
+
+typedef struct _checksum_list_entry
+{
+    struct _checksum_list_entry *next;
+    unsigned char      *checksum;
+    uint64_t            size;
     char               *filename;
-} md5_list_entry_t;
+} checksum_list_entry_t;
 
 
 typedef struct _jigdo_msg_entry
