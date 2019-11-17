@@ -61,7 +61,7 @@
 #define JTE_VER_MAJOR     0x0002
 #define JTE_VER_MINOR     0x0000
 #define JTE_NAME          "JTE"
-#define JTE_COMMENT       "JTE at http://www.einval.com/~steve/software/JTE/ ; jigdo at http://atterer.org/jigdo/"
+#define JTE_COMMENT       "JTE at https://www.einval.com/~steve/software/JTE/ ; Jigdo at https://www.einval.com/~steve/software/jigdo/"
 
 #define JIGDO_TEMPLATE_VERSION_MD5    "1.1"
 #define JIGDO_TEMPLATE_VERSION_SHA256 "2.0"
