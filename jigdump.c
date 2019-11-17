@@ -102,7 +102,8 @@ static INT64 parse_desc_data(INT64 offset, unsigned char *buf, size_t buf_size)
             skipLen |= (UINT64)buf[4] << 24;
             skipLen |= (UINT64)buf[5] << 32;
             skipLen |= (UINT64)buf[6] << 40;
-            printf("    Template data, %llu bytes\n", skipLen);
+            printf("    7 byte entry:\n");
+            printf("      Template data, %llu bytes of data\n", skipLen);
             return 7;
         }
         case BLOCK_IMAGE_MD5:
@@ -123,13 +124,14 @@ static INT64 parse_desc_data(INT64 offset, unsigned char *buf, size_t buf_size)
             blocklen |= (UINT32)buf[25] << 16;
             blocklen |= (UINT32)buf[26] << 24;
 
-	    printf("    Image info block v1 using MD5\n");
-            printf("    Original image length %llu bytes\n", imglen);
-            printf("    Image MD5: ");
+	    printf("    27 byte entry:\n");
+	    printf("      Image info block v1 using MD5\n");
+            printf("      Original image length %llu bytes\n", imglen);
+            printf("      Image MD5: ");
             for (i = 7; i < 23; i++)
                 printf("%2.2x", buf[i]);
             printf(" (%s)\n", base64_dump(&buf[7], 16));
-            printf("    Rsync block length %lu bytes\n", blocklen);
+            printf("      Rsync block length %lu bytes\n", blocklen);
             return 27;
         }
         case BLOCK_IMAGE_SHA256:
@@ -150,13 +152,14 @@ static INT64 parse_desc_data(INT64 offset, unsigned char *buf, size_t buf_size)
             blocklen |= (UINT32)buf[41] << 16;
             blocklen |= (UINT32)buf[42] << 24;
 
-	    printf("    Image info block v2 using SHA256\n");
-            printf("    Original image length %llu bytes\n", imglen);
-            printf("    Image SHA256: ");
+	    printf("    43 byte entry:\n");
+	    printf("      Image info block v2 using SHA256\n");
+            printf("      Original image length %llu bytes\n", imglen);
+            printf("      Image SHA256: ");
             for (i = 7; i < 39; i++)
                 printf("%2.2x", buf[i]);
             printf(" (%s)\n", base64_dump(&buf[7], 32));
-            printf("    Rsync block length %lu bytes\n", blocklen);
+            printf("      Rsync block length %lu bytes\n", blocklen);
             return 43;
         }
         case BLOCK_MATCH_MD5:
@@ -172,14 +175,15 @@ static INT64 parse_desc_data(INT64 offset, unsigned char *buf, size_t buf_size)
             fileLen |= (UINT64)buf[5] << 32;
             fileLen |= (UINT64)buf[6] << 40;
             
-            printf("    File %s block v1 using MD5\n",
+	    printf("    31 byte entry:\n");
+            printf("      File %s block v1 using MD5\n",
                    (type == BLOCK_MATCH_MD5 ? "match" : "written"));
-            printf("    length %llu bytes\n", fileLen);
-            printf("    file rsyncsum: ");
+            printf("      length %llu bytes\n", fileLen);
+            printf("      file rsyncsum: ");
             for (i = 7; i < 15; i++)
                 printf("%2.2x", buf[i]);
             printf(" (%s)\n", base64_dump(&buf[7], 8));
-            printf("    file md5: ");
+            printf("      file md5: ");
             for (i = 15; i < 31; i++)
                 printf("%2.2x", buf[i]);
             printf(" (%s)\n", base64_dump(&buf[15], 16));
@@ -198,21 +202,22 @@ static INT64 parse_desc_data(INT64 offset, unsigned char *buf, size_t buf_size)
             fileLen |= (UINT64)buf[5] << 32;
             fileLen |= (UINT64)buf[6] << 40;
 
-            printf("    File %s block v2 using SHA256\n",
+	    printf("    47 byte entry:\n");
+            printf("      File %s block v2 using SHA256\n",
                    (type == BLOCK_MATCH_SHA256 ? "match" : "written"));
-            printf("    length %llu bytes\n", fileLen);
-            printf("    file rsyncsum: ");
+            printf("      length %llu bytes\n", fileLen);
+            printf("      file rsyncsum: ");
             for (i = 7; i < 15; i++)
                 printf("%2.2x", buf[i]);
             printf(" (%s)\n", base64_dump(&buf[7], 8));
-            printf("    file sha256: ");
+            printf("      file sha256: ");
             for (i = 15; i < 47; i++)
                 printf("%2.2x", buf[i]);
             printf(" (%s)\n", base64_dump(&buf[15], 32));
             return 47;
         }
         default:
-	    printf("    block type unknown, skipping forwards in hope\n");
+	    printf("    Unrecognised block type %d, skipping forwards in hope\n", type);
 	    return 1;
             break;
     }
