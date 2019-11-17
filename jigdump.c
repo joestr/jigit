@@ -73,7 +73,7 @@ static INT64 parse_desc_block(INT64 offset, unsigned char *buf, size_t buf_size)
     /* Parse the contents of this data block... */
     UINT64 descLen = 0;
     
-    printf("\nDESC block found at offset %lld\n", offset);
+    printf("\nDESC block found at offset %lld (%llx)\n", offset, offset);
     descLen = (UINT64)buf[4];
     descLen |= (UINT64)buf[5] << 8;
     descLen |= (UINT64)buf[6] << 16;
@@ -160,6 +160,7 @@ static INT64 parse_desc_data(INT64 offset, unsigned char *buf, size_t buf_size)
             return 43;
         }
         case BLOCK_MATCH_MD5:
+        case BLOCK_WRITTEN_MD5:
         {
             UINT64 fileLen = 0;
             int i = 0;
@@ -171,7 +172,8 @@ static INT64 parse_desc_data(INT64 offset, unsigned char *buf, size_t buf_size)
             fileLen |= (UINT64)buf[5] << 32;
             fileLen |= (UINT64)buf[6] << 40;
             
-            printf("    File match block v1 using MD5\n");
+            printf("    File %s block v1 using MD5\n",
+                   (type == BLOCK_MATCH_MD5 ? "match" : "written"));
             printf("    length %llu bytes\n", fileLen);
             printf("    file rsyncsum: ");
             for (i = 7; i < 15; i++)
@@ -184,6 +186,7 @@ static INT64 parse_desc_data(INT64 offset, unsigned char *buf, size_t buf_size)
             return 31;
         }
         case BLOCK_MATCH_SHA256:
+        case BLOCK_WRITTEN_SHA256:
         {
             UINT64 fileLen = 0;
             int i = 0;
@@ -195,7 +198,8 @@ static INT64 parse_desc_data(INT64 offset, unsigned char *buf, size_t buf_size)
             fileLen |= (UINT64)buf[5] << 32;
             fileLen |= (UINT64)buf[6] << 40;
 
-            printf("    File match block v2 using SHA256\n");
+            printf("    File %s block v2 using SHA256\n",
+                   (type == BLOCK_MATCH_SHA256 ? "match" : "written"));
             printf("    length %llu bytes\n", fileLen);
             printf("    file rsyncsum: ");
             for (i = 7; i < 15; i++)
@@ -236,6 +240,21 @@ static INT64 parse_desc_pointer(INT64 offset, unsigned char *buf, size_t buf_siz
     return 6;
 }
 
+static INT64 parse_tmp_desc_pointer(unsigned char *buf)
+{
+    /* Parse the contents of this final block... */
+    UINT64 ptr = 0;
+
+    ptr = (UINT64)buf[0];
+    ptr |= (UINT64)buf[1] << 8;
+    ptr |= (UINT64)buf[2] << 16;
+    ptr |= (UINT64)buf[3] << 24;
+    ptr |= (UINT64)buf[4] << 32;
+    ptr |= (UINT64)buf[5] << 48;
+
+    return ptr;
+}
+
 static INT64 parse_header_block(INT64 offset, unsigned char *buf, size_t buf_size)
 {
     /* Massive overkill for sizes, but safe! */
@@ -252,6 +271,26 @@ static INT64 parse_header_block(INT64 offset, unsigned char *buf, size_t buf_siz
     printf("Found header: \"%s\"\n", HEADER_STRING);
     printf("Format version: %s\n", format_version);
     printf("Generator: %s\n", generator);
+
+    return 0;
+}
+
+/* return 1 if haystack ends with the text contained in needle, 0
+ * otherwise */
+static int string_ends(char *haystack, char *needle)
+{
+    int hlen;
+    int nlen;
+
+    if (NULL == haystack || NULL == needle)
+        return 0;
+
+    hlen = strlen(haystack);
+    nlen = strlen(needle);
+    if (nlen > hlen)
+        return 0;
+    if (!strcmp((haystack + hlen - nlen), needle))
+        return 1;
 
     return 0;
 }
@@ -297,38 +336,63 @@ int main(int argc, char **argv)
         return ENOMEM;
     }
 
-    /* Find the beginning of the data - read the first chunk,
-     * including the header */
-    while (STARTING == state)
+    /* If we're looking at a template file, find the beginning of the
+     * data - read the first chunk, including the header. Only do this
+     * if the filename ends in ".template" */
+    if (string_ends(filename, ".template"))
     {
-        INT64 start_offset = -1;
+        printf("Filename %s ends in .template.\n", filename);
+        printf("Assuming this is meant to be a template file.\n");
+	while (STARTING == state)
+	{
+	    INT64 start_offset = -1;
 
+	    bytes = read(fd, buf, BUF_SIZE);
+	    if (0 >= bytes)
+	    {
+		state = DONE;
+		break;
+	    }
+
+	    start_offset = find_string(buf, bytes, HEADER_STRING);
+	    if (0 != start_offset)
+	    {
+		printf("Can't find header - this is not a template file\n");
+		return EINVAL;
+	    }
+	    if (0 != parse_header_block(start_offset, buf, bytes))
+		return EINVAL;
+
+	    start_offset = find_string(buf, bytes, "DATA");
+	    if (-1 == start_offset)
+		start_offset = find_string(buf, bytes, "BZIP");
+	    if (start_offset >= 0)
+	    {
+		offset += start_offset;
+		state = IN_DATA;
+		break;
+	    }
+	    offset += bytes;
+	}
+    }
+    else
+    {
+        printf("Filename %s does not end in .template.\n", filename);
+        printf("Assuming this is NOT meant to be a template file.\n");
+        /* We're looking at a tmp file? No header available. Seek to
+        the end for the final DESC * pointer */
+        lseek(fd, template_size - 6, SEEK_SET);
         bytes = read(fd, buf, BUF_SIZE);
-        if (0 >= bytes)
+        if (bytes != 6)
         {
             state = DONE;
-            break;
         }
-
-	start_offset = find_string(buf, bytes, HEADER_STRING);
-        if (0 != start_offset)
-	{
-            printf("Can't find header - this is not a template file\n");
-	    return EINVAL;
-	}
-	if (0 != parse_header_block(start_offset, buf, bytes))
-	    return EINVAL;
-
-        start_offset = find_string(buf, bytes, "DATA");
-        if (-1 == start_offset)
-            start_offset = find_string(buf, bytes, "BZIP");
-        if (start_offset >= 0)
+        else
         {
-            offset += start_offset;
-            state = IN_DATA;
-            break;
+            INT64 start_offset = parse_tmp_desc_pointer(buf);
+            offset = template_size - start_offset;
+            state = IN_DESC;
         }
-        offset += bytes;
     }
 
     while (DONE != state && ERROR != state)

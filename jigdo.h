@@ -14,11 +14,13 @@
 #define COMP_BZIP2 2
 
 /* Block types within the template file */
-#define BLOCK_DATA         2
-#define BLOCK_IMAGE_MD5    5
-#define BLOCK_MATCH_MD5    6
-#define BLOCK_IMAGE_SHA256 8
-#define BLOCK_MATCH_SHA256 9
+#define BLOCK_DATA            2
+#define BLOCK_IMAGE_MD5       5
+#define BLOCK_MATCH_MD5       6
+#define BLOCK_WRITTEN_MD5     7
+#define BLOCK_IMAGE_SHA256    8
+#define BLOCK_MATCH_SHA256    9
+#define BLOCK_WRITTEN_SHA256 10
 
 /* Useful types and macros */
 typedef long long INT64;
