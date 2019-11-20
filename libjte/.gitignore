@@ -1,0 +1,15 @@
+*.pc
+autom4te.cache
+libtool
+.deps
+.dirstamp
+test/demo
+Makefile
+libjte
+Makefile.in
+*.m4
+compile
+configure
+depcomp
+ltmain.sh
+missing
