@@ -2,9 +2,9 @@ dnl IMPORTANT:
 dnl When changing the library version, change also the macros LIBJTE_VERSION_*
 dnl in libjte.h.
 dnl You will probably want to increment LT_CURRENT and LT_AGE to increment
-dnl the age counter X of the library name libjte.so.1.X.0
+dnl the age counter X of the library name libjte.so.2.X.0
 dnl
-AC_INIT([libjte], [1.0.0], [http://www.libburnia-project.org])
+AC_INIT([libjte], [2.0.0], [https://www.einval.com/~steve/software/JTE/])
 
 AC_PREREQ([2.50])
 
@@ -35,9 +35,9 @@ dnl
 dnl 
 dnl Library name = libjte.so.(LT_CURRENT-LT_AGE).(LT_AGE).(LT_REVISION)
 dnl
-dnl I.e. currently: libjte.so.1.0.0
+dnl I.e. currently: libjte.so.2.0.0
 dnl
-LT_CURRENT=1
+LT_CURRENT=2
 LT_AGE=0
 LT_REVISION=0
 LT_CURRENT_MINUS_AGE=`expr $LT_CURRENT - $LT_AGE`
@@ -178,6 +178,6 @@ AC_SUBST(LIBBURNIA_LDCONFIG_CMD)
 AC_CONFIG_FILES([
 	Makefile
 	version.h
-	libjte-1.pc
+	libjte-2.pc
 	])
 AC_OUTPUT
