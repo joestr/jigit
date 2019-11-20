@@ -64,11 +64,11 @@ test_demo_SOURCES = test/demo.c
 
 # Extra things
 nodist_pkgconfig_DATA = \
-	libjte-1.pc
+	libjte-2.pc
 
 
 EXTRA_DIST = \
-	libjte-1.pc.in \
+	libjte-2.pc.in \
 	version.h.in \
 	bin/jigdo-gen-md5-list \
 	doc/jigdo-gen-md5-list.1 \
