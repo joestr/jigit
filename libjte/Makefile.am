@@ -70,8 +70,8 @@ nodist_pkgconfig_DATA = \
 EXTRA_DIST = \
 	libjte-2.pc.in \
 	version.h.in \
-	bin/jigdo-gen-md5-list \
-	doc/jigdo-gen-md5-list.1 \
+	bin/jigdo-gen-checksum-list \
+	doc/jigdo-gen-checksum-list.1 \
 	doc/API \
 	doc/TODO \
 	doc/NOTES \
