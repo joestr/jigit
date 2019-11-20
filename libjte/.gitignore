@@ -13,3 +13,4 @@ configure
 depcomp
 ltmain.sh
 missing
+version.h

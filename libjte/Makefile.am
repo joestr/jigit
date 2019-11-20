@@ -69,7 +69,6 @@ nodist_pkgconfig_DATA = \
 
 EXTRA_DIST = \
 	libjte-2.pc.in \
-	version.h.in \
 	bin/jigdo-gen-checksum-list \
 	doc/jigdo-gen-checksum-list.1 \
 	doc/API \

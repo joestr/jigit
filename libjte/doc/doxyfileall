@@ -84,7 +84,7 @@ WARN_NO_PARAMDOC       = NO
 WARN_FORMAT            = "$file:$line: $text"
 WARN_LOGFILE           = 
 INPUT                  = checksum.c endian.c jte.c libjte.c md5.c rsync.c sha1.c sha256.c sha512.c \
-                         checksum.h  endianconv.h  jte.h  libjte.h  libjte_private.h  md5.h rsync.h  sha1.h  sha256.h  sha512.h  version.h
+                         checksum.h  endianconv.h  jte.h  libjte.h  libjte_private.h  md5.h rsync.h  sha1.h  sha256.h  sha512.h
 INPUT_ENCODING         = UTF-8
 FILE_PATTERNS          = *.c \
                          *.cc \
