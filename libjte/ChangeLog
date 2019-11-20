@@ -1,3 +1,30 @@
+libjte-2.0.0 (20th November 2019)
+============
+
+* New major version with support for using SHA256 checksums instead of
+  MD5 in the jigdo format. This is a breaking change - old clients
+  will not be able to work with the new format and will bail
+  out. Default is to still generate the old v1.1 format for
+  compatibility for now. Call libjte_set_checksum_algorithm() to make
+  an explicit choice at the beginning of the jigdo setup.
+
+* Several old MD5-specific functions in the API now marked deprecated:
+  + libjte_set_md5_path()
+  + libjte_add_md5_demand()
+  + libjte_decide_file_jigdo()
+  + libjte_write_match_record()
+    
+*  Added new functions needed to allow for more checksum choice:
+  + libjte_set_checksum_algorithm()
+  + libjte_set_checksum_path()
+  + libjte_add_checksum_demand()
+  + libjte_decide_file_jigdo2()
+  + libjte_write_match_record2()
+    
+* The "Simplified" API is unchanged for existing users *except* when
+  choosing to use sha256 instead of md5 - it just needs a call to
+  libjte_set_checksum_algorithm() at startup to make that choice.
+
 libjte-0.1.1 (not released yet)
 ===============================================================================
 * Thomas: porting libjte to Solaris 9: avoiding <stdint.h> if not available,

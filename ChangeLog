@@ -1,6 +1,14 @@
-Version 1.22 (2019-11-05)
+Version 1.22 (2019-11-20)
 
- * Add support for SHA256 checksums
+ * Add support for SHA256 checksums, using jigdo format v2
+   + Changes to libjte to generate the new format as an option - still
+     defaults to v1 for cmpatibility for now
+   + libjte updated to major version 2
+   + Add support for v2 in jigdump, jigit-mkimage etc. too
+   + Add new jigsum-sha256 program, for the base64-like output with
+     sha256 checksums
+ * jigdump now also understands jigdo .iso.tmp files
+ * Misc small cleanups
 
 Version 1.21 (2019-02-04)
 
