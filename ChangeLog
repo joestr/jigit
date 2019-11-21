@@ -1,4 +1,4 @@
-Version 1.22 (2019-11-20)
+Version 1.22 (2019-11-21)
 
  * Add support for SHA256 checksums, using jigdo format v2
    + Changes to libjte to generate the new format as an option - still
