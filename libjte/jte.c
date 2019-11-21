@@ -1210,8 +1210,8 @@ static int write_jigdo_file(struct libjte_env *o)
     checksum_copy(o->template_context, check_algos[o->checksum_algo].type, &template_checksum[0]);
 
     fprintf(j_file, "# JigsawDownload\n");
-    fprintf(j_file, "# See <http://atterer.org/jigdo/> for details about jigdo\n");
-    fprintf(j_file, "# See <http://www.einval.com/~steve/software/CD/JTE/> for details about JTE\n\n");
+    fprintf(j_file, "# See <https://www.einval.com/~steve/software/jigdo/> for details about jigdo\n");
+    fprintf(j_file, "# See <https://www.einval.com/~steve/software/JTE/> for details about JTE\n\n");
     
     fprintf(j_file, "[Jigdo]\n");
     if (CHECK_MD5 == check_algos[o->checksum_algo].type)
