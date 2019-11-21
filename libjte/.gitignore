@@ -14,3 +14,6 @@ depcomp
 ltmain.sh
 missing
 version.h
+config.guess
+config.sub
+install-sh
