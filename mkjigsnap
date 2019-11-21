@@ -2,7 +2,7 @@
 #
 # mkjigsnap
 #
-# (c) 2004-2014 Steve McIntyre <steve@einval.com>
+# (c) 2004-2019 Steve McIntyre <steve@einval.com>
 #
 # Server-side wrapper; run this on a machine with a mirror to set up
 # the snapshots for jigit / jigdo downloading
@@ -94,22 +94,23 @@ my %file_list;
 my %ref;
 my %jigdo_backref;
 
-$result = GetOptions("b=s" => \$backref_file,
-                     "c"   => \$check_checksums,
-                     "C=s" => \$checksum_out,
-                     "d=s" => \$dirname,
-                     "f=s" => \$failedfile,
-                     "i=s" => \$ignorefile,
-                     "J=s" => \$jigdolist,
-                     "j=s" => \@jigdos,
-                     "k=s" => \@keywords,
-                     "m=s" => \@mirrors,
-                     "N"   => \$dryrun,
-                     "n=s" => \$cdname,
-                     "o=s" => \$outdir,
-                     "T=s" => \$tempdir,
-                     "t=s" => \$template,
-                     "v"   => \$verbose);
+GetOptions("b=s" => \$backref_file,
+           "c"   => \$check_checksums,
+           "C=s" => \$checksum_out,
+           "d=s" => \$dirname,
+           "f=s" => \$failedfile,
+           "i=s" => \$ignorefile,
+           "J=s" => \$jigdolist,
+           "j=s" => \@jigdos,
+           "k=s" => \@keywords,
+           "m=s" => \@mirrors,
+           "N"   => \$dryrun,
+           "n=s" => \$cdname,
+           "o=s" => \$outdir,
+           "T=s" => \$tempdir,
+           "t=s" => \$template,
+           "v"   => \$verbose)
+    or die "Error in command line arguments, bailing out\n";
 
 # Sanity-check arguments
 if (!defined ($dirname)) {
@@ -226,6 +227,46 @@ sub parse_ignore_file {
     print "parse_ignore_file: loaded $num_ignored_loaded entries from file $inputfile\n";
 }
 
+# Iff we have a checksum of the right type, calculate the checksum of
+# the file on disk and validate
+sub validate_checksum($$$) {
+    my $file = shift;
+    my $full_path = shift;
+    my $type = shift;
+    my $jigsum;
+    my $checksum = "";
+
+    if (! exists $ref{$file}{$type}) {
+	return 0; # Nothing to compare, so we're good!
+    }
+
+    # else
+    if ($type eq "md5") {
+	$jigsum= `jigsum $full_path 2>/dev/null`;
+	if ($jigsum =~ m/^(.{22}) /) {
+	    $checksum = $1;
+	}
+    } elsif ($type eq "sha256") {
+	$jigsum= `jigsum-sha256 $full_path 2>/dev/null`;
+	if ($jigsum =~ m/^(.{43}) /) {
+	    $checksum = $1;
+	}
+    }
+
+    if (length($checksum) < 2) {
+	# Didn't find a checksum in the jigsum output, so failed
+	return -2;
+    }
+
+    # else
+    if (!($ref{$file}{$type} =~ m/\Q$checksum\E/)) {
+	return -1;
+    }
+
+    # else
+    return 0;
+}
+
 sub generate_snapshot_tree () {
     my $done = 0;
     my $failed = 0;
@@ -311,22 +352,25 @@ sub generate_snapshot_tree () {
                 }
             }
         }
+
         if (-e $outfile && $check_checksums) {
-            my $jigsum = `jigsum $outfile 2>/dev/null`;
-            my $checksum;
-            if ($jigsum =~ m/^(......................)/) {
-                $checksum = $1;
-				if (!($ref{$_} =~ m/\Q$checksum\E/ )) {
-                    print "\nChecksum failure: $_\n";
-                    $ck_failed++;
-                    push (@ck_failed_files, $_);
-                }
-            } else {
+	    my $csum_result;
+	    $csum_result = validate_checksum($_, $outfile, "md5");
+	    if (0 == $csum_result) {
+		# no problems
+		$csum_result = validate_checksum($_, $outfile, "sha256");
+	    }
+	    if ($csum_result == -1) {
+		print "\nChecksum failure: $_\n";
+		$ck_failed++;
+		push (@ck_failed_files, $_);
+	    } elsif ($csum_result == -2) {
                 print "\nFailed to jigsum $_\n";
             }
-		}
+	}
+
         $done++;
-        if ( !($done % 10000) ) {
+        if ( !($done % 10000) or ($check_checksums && !($done % 100))) {
             print "$done done, ignored $ignored, failed $failed ck_failed $ck_failed out of $num_unique\n";
         }
     }
@@ -335,21 +379,20 @@ sub generate_snapshot_tree () {
     if (defined($failedfile) && ($failed > 0)) {
         print "Writing list of failed files to $failedfile\n";
         open(FAIL_LOG, "> $failedfile") or die "Failed to open $failedfile: $!\n";
-	if ($backref_file) {
-	    open (BACKREF, "> $backref_file") or die "Failed to open $backref_file: $!\n";
-	    print "Writing backref details to $backref_file\n";
-	}
+        if ($backref_file) {
+            open (BACKREF, "> $backref_file") or die "Failed to open $backref_file: $!\n";
+        }
         foreach my $missing (@failed_files) {
             print FAIL_LOG "$missing\n";
-	    if ($backref_file) {
-		print BACKREF "$missing:\n";
-		print BACKREF $jigdo_backref{$missing};
-	    }
-        }	
+            if ($backref_file) {
+                print BACKREF "$missing:\n";
+                print BACKREF $jigdo_backref{$missing};
+            }
+        }
         close FAIL_LOG;
-	if ($backref_file) {
-	    close BACKREF;
-	}
+        if ($backref_file) {
+            close BACKREF;
+        }
     }
 
     # Now walk the tree and delete files that we no longer need
@@ -383,50 +426,73 @@ foreach my $injig (sort @jigdos) {
     open (INJIG, "zcat -f $injig |");
     $num_parsed++;
     while (<INJIG>) {
-	my ($file, $jigsum);
-	chomp;
-	foreach my $keyword (@keywords) {
-	    if (m/^(......................)=$keyword:(.*)$/) {
-		$jigsum = $1;
-		$file = $2;
-		$file =~ s?^/??;
-	    }
-	}
-	if (defined($file)) {
-	    $num_unsorted++;
-	    if (!exists $ref{$file}) {
-		$num_unique++;
-		$ref{$file} = $jigsum;
-	    } else {
-		if (!($ref{$file} =~ /\Q$jigsum\E/ )) {
-		    print "  ERROR: $file referenced again with different checksum!\n";
-		    print "    (old " . $ref{$file} . " new $jigsum\n";
-		}
-	    }
-	    if ($backref_file) {
-		if (!defined $jigdo_backref{$file}) {
-		    $jigdo_backref{$file} = " $injig\n";
-		} else {
-		    $jigdo_backref{$file} .= " $injig\n";
-		}
-	    }
-	    if ( !($num_unsorted % 100000) ) {
-		print "  found $num_unsorted total, $num_unique unique files, $num_parsed / $num_jigdos jigdo files ($injig)\n";
-	    }
-	}
+        my ($file, $jigsum, $type);
+        chomp;
+        foreach my $keyword (@keywords) {
+            # Look for a jigdo format v1 match first, with
+            # base64(ish)-encoded md5 checksums (22 chars before the
+            # "=")
+            if (m/^(.{22})=$keyword:(.*)$/) {
+                $jigsum = $1;
+                $file = $2;
+                $file =~ s?^/??;
+                $type = "md5";
+            }
+            # Otherwise, look for a jigdo format v2 match, with
+            # base64(ish)-encoded sha256 checksums (43 chars before
+            # the "=")
+            if (m/^(.{43})=$keyword:(.*)$/) {
+                $jigsum = $1;
+                $file = $2;
+                $file =~ s?^/??;
+                $type = "sha256";
+            }
+        }
+        if (defined($file)) {
+            $num_unsorted++;
+            # Only count a ref of any kind as unique
+            if (!exists $ref{$file}) {
+                $num_unique++;
+            }
+            # Even though we have to treat different checksums
+            # differently
+            if (!exists $ref{$file}{$type}) {
+                $ref{$file}{$type} = $jigsum;
+            } else {
+                if (!($ref{$file}{$type} =~ /\Q$jigsum\E/ )) {
+                    print "  ERROR: $file referenced again with different checksum!\n";
+                    print "    (old " . $ref{$file}{$type} . " new $jigsum\n";
+                }
+            }
+            if ($backref_file) {
+                if (!defined $jigdo_backref{$file}) {
+                    $jigdo_backref{$file} = " $injig\n";
+                } else {
+                    $jigdo_backref{$file} .= " $injig\n";
+                }
+            }
+            if (!($num_unsorted % 100000) ) {
+                print "  found $num_unsorted total, $num_unique unique file refs, $num_parsed / $num_jigdos jigdo files ($injig)\n";
+            }
+        }
     }
     close(INJIG);
 }
 $parsedonedate = `date -u`;
-print "  found $num_unsorted total, $num_unique unique files in $num_jigdos jigdo files\n";
+print "  found $num_unsorted total, $num_unique unique file refs in $num_jigdos jigdo files\n";
 
 if ($checksum_out) {
     open(CK_OUT, "> $checksum_out") or die "Can't open $checksum_out for writing: $!\n";
     foreach $_ (sort (keys %ref)) {
-        print CK_OUT $ref{$_} . "  $_\n";
+        if (exists $ref{$_}{"md5"}) {
+            print CK_OUT $ref{$_}{"md5"} . "  $_\n";
+        }
+        if (exists $ref{$_}{"sha256"}) {
+            print CK_OUT $ref{$_}{"sha256"} . "  $_\n";
+        }
     }
     close(CK_OUT);
-}	
+}
 
 if ($num_unique < 5) {
     die "Only $num_unique for the snapshot? Something is wrong; abort!\n"
@@ -446,6 +512,9 @@ if (defined($ignorefile)) {
 }
 
 print "Trying to snapshot-link $num_unique files into $dirname\n";
+if ($check_checksums) {
+    print "  (and checksumming every file, so this may take a while)\n";
+}
 generate_snapshot_tree();
 $snapdonedate = `date -u`;
 
