@@ -1,7 +1,7 @@
 /*
  * jte.c
  *
- * Copyright (c) 2004-2006 Steve McIntyre <steve@einval.com>
+ * Copyright (c) 2004-2019 Steve McIntyre <steve@einval.com>
  * Copyright (c) 2010 Thomas Schmitt <scdbackup@gmx.net>
  * Copyright (c) 2010 George Danchev <danchev@spnet.net>
  *

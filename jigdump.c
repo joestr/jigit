@@ -3,7 +3,7 @@
  *
  * Tool to dump the contents of a jigdo template file
  *
- * Copyright (c) 2004 Steve McIntyre <steve@einval.com>
+ * Copyright (c) 2004-2019 Steve McIntyre <steve@einval.com>
  *
  * GPL v2 - see COPYING
  */

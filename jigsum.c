@@ -4,7 +4,7 @@
  * Tool to calculate and print MD5 checksums in jigdo's awkward
  * base64-ish encoding.
  *
- * Copyright (c) 2004 Steve McIntyre <steve@einval.com>
+ * Copyright (c) 2004-2019 Steve McIntyre <steve@einval.com>
  *
  * GPL v2 - see COPYING
  */

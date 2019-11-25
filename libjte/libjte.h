@@ -2,6 +2,7 @@
  * libjte.h
  *
  * Copyright (c) 2010 Thomas Schmitt <scdbackup@gmx.net>
+ * Copyright (c) 2019 Steve McImtyre <steve@einval.com>
  *
  * API definition of libjte, to be included as <libjte/libjte.h>
  *

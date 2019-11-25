@@ -1,7 +1,9 @@
 Steve McIntyre <steve@einval.com>
 George Danchev <danchev@spnet.net>
 Thomas Schmitt <scdbackup@gmx.net>
-Copyright (C) 2000-2010 Free Software Foundation, Inc., Steve McIntyre, George Danchev, Thomas Schmitt.
+
+Copyright (C) 2000-2019 Free Software Foundation, Inc.,
+  Steve McIntyre, George Danchev, Thomas Schmitt.
 
 This statement overrides for the libjte package as a whole any license
 statements by Steve McIntyre, George Danchev, and Thomas Schmitt in the

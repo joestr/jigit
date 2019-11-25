@@ -2,6 +2,7 @@
  * libjte.c
  *
  * Copyright (c) 2010-2011 Thomas Schmitt <scdbackup@gmx.net>
+ * Copyright (c) 2019 Steve McImtyre <steve@einval.com>
  *
  * API functions of libjte
  *
