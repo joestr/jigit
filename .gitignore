@@ -11,3 +11,6 @@ jigsum
 jigsum-sha256
 parallel-sums
 rsyncsum
+*.8
+*.1
+README

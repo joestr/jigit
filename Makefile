@@ -42,11 +42,18 @@ clean:
 distclean: clean
 	-make -C libjte distclean
 
+docdist:
+	for file in *.in; do \
+	  OUT=$$(echo $$file | sed 's/\.in$$//'); \
+	  sed "s/@VERSION@/$$VERSION/g;s/@MON_YEAR@/$$MON_YEAR/g" $$file > $$OUT; \
+	done
+
 # Create source tarball from git. Complicated some - do autoconf dance
 # in there too
 gitdist:	Makefile
 		@VERSION=$$(git describe | awk '{gsub("^.*/","");gsub("^v","");print $$0}'); \
-		echo "VERSION is $$VERSION"; \
+		MON_YEAR=$$(date '+%B %Y'); \
+		echo "VERSION is $$VERSION, MON_YEAR is \"$$MON_YEAR\""; \
 		OUTPUT="jigit-$$VERSION"; \
 		WD=$$(pwd); \
 		if [ -e "../$$OUTPUT.tar.xz" ]; then \
@@ -60,7 +67,9 @@ gitdist:	Makefile
 		echo "Creating working dir in ../$$OUTPUT"; \
 		git archive --format=tar --prefix="$$OUTPUT/" HEAD | tar -C .. -xf - ; \
 		echo "Running autoconf then cleanup in ../$$OUTPUT"; \
-		cd ../$$OUTPUT/libjte && ./bootstrap && rm -rf autom4te.cache && cd $$WD; \
+		cd ../$$OUTPUT/libjte && ./bootstrap && rm -rf autom4te.cache && \
+		  cd .. && make docdist VERSION="$$VERSION" MON_YEAR="$$MON_YEAR" && rm -f *.in; \
 		echo "Creating dist tarball in ../$$OUTPUT.tar.xz"; \
-		tar -C .. -c --xz -f ../$$OUTPUT.tar.xz $$OUTPUT; rm -rf ../$$OUTPUT
+		tar -C .. -c --xz -f ../$$OUTPUT.tar.xz $$OUTPUT; rm -rf ../$$OUTPUT; \
+		cd $$WD;
 

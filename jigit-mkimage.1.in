@@ -1,4 +1,4 @@
-.TH JIGIT-MKIMAGE 1 "November 2019" "Jigit jigdo tools"
+.TH JIGIT-MKIMAGE 1 "@MON_YEAR@" "Jigit jigdo tools"
 .SH NAME
 jigit-mkimage \- Create an ISO image from jigdo files
 .SH SYNOPSIS

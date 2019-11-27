@@ -1,4 +1,4 @@
-.TH PARALLEL-SUMS 1 "November 2019" "Jigit jigdo tools"
+.TH PARALLEL-SUMS 1 "@MON_YEAR@" "Jigit jigdo tools"
 .SH NAME
 parallel-sums \- Calculate checksums in parallel using multiple algorithms
 .SH SYNOPSIS

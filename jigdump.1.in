@@ -1,4 +1,4 @@
-.TH JIGDUMP 1 "November 2019" "Jigit jigdo tools"
+.TH JIGDUMP 1 "@MON_YEAR@" "Jigit jigdo tools"
 .SH NAME
 jigdump \- Dump the contents of a template file
 .SH SYNOPSIS

@@ -1,4 +1,4 @@
-.TH MKJIGSNAP 8 "November 2019" "Jigit jigdo tools"
+.TH MKJIGSNAP 8 "@MON_YEAR@" "Jigit jigdo tools"
 .SH NAME
 mkjigsnap \- Create a snapshot tree on a jigdo server
 .SH SYNOPSIS

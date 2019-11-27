@@ -1,4 +1,4 @@
-.TH JIGSUM-SHA256 1 "November 2019" "Jigit jigdo tools"
+.TH JIGSUM-SHA256 1 "@MON_YEAR@" "Jigit jigdo tools"
 .SH NAME
 jigsum-sha256 \- List SHA256 sums of files in jigdo's base64-like format
 .SH SYNOPSIS
