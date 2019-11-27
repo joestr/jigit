@@ -1,85 +1,103 @@
-README for JTE 1.22
+README for JTE version @VERSION@
 
 Steve McIntyre <steve@einval.com>
-20 November 2019
+@DATE@
 
 License - GPL v2+. See the file COPYING for more details.
 
 JTE - Jigdo Template Export
 ===========================
 
+  • Introduction - jigdo and JTE
+  • Download
+  • How to use JTE
+  • How JTE works
+  • How to use jigit-mkimage
+  • (Dead) experiments
+  • External integration
+  • What's left to do?
+
+----------------------------------------------------------------------
+
 Introduction - jigdo and JTE
 ----------------------------
 
-Jigdo is a useful tool to help in the distribution of large files like CD and
-DVD images. See Richard Atterer's site for more details. Debian CDs and DVD ISO
-images are published on the web in jigdo format to allow end users to download
-them more efficiently.
+Jigdo is a useful tool to help in the distribution of large files like CD
+and DVD images. See Richard Atterer's site [1] for more details. Debian CDs
+and DVD ISO images are published on the web in jigdo format to allow end
+users to download them more efficiently.
 
-Jigdo is generic and powerful - it can be used for any large files that are
-made up of smaller files. However, to be this generic is costly. Creating jigdo
-files from ISO images is quite inefficient - to work out which files are
-included in the ISO image, jigdo has to calculate and compare checksums of
-every possible file and every extent in the image. Essentially it has to
-brute-force the image. It can take a long time to do this for a large image
-(imagine a 4.5GB DVD image or a 30+GB Blu-Ray image).
+[1] http://atterer.org/jigdo/
+
+Jigdo is generic and powerful - it can be used for any large files that
+are made up of smaller files. However, to be this generic is costly.
+Creating jigdo files from ISO images is quite inefficient - to work out
+which files are included in the ISO image, jigdo has to calculate and
+compare checksums of every possible file and every extent in the image.
+Essentially it has to brute-force the image. It can take a long time to do
+this for a large image (imagine a 4.5GB DVD image or a 30+GB Blu-Ray
+image).
 
 I first started looking for ways to improve this back in 2004:
 
  1. Modify jigdo so it knew about the internals of ISO images and could
     efficiently scan them (bad, not very generic for jigdo)
- 2. Write a helper tool to dump extra information for jigdo to use alongside
-    the ISO image (I had a helper tool written, but modifying jigdo to use this
-    looked HARD)
- 3. Patch mkisofs/genisoimage to write .jigdo and .template files alongside the
-    ISO image
+ 2. Write a helper tool to dump extra information for jigdo to use
+    alongside the ISO image (I had a helper tool written, but modifying
+    jigdo to use this looked HARD)
+ 3. Patch mkisofs/genisoimage to write .jigdo and .template files
+    alongside the ISO image
 
-I completed the third of these options, and called it JTE (or Jigdo Template
-Export). The code worked fine, and ran in a very small fraction of the time
-taken to run genisoimage and jigdo separately. The output .jigdo and .template
-files worked correctly, i.e. jigdo-file and the wrapper script jigdo-mirror
-accept them and would generate an ISO image that exactly matches the original.
+I completed the third of these options, and called it JTE (or Jigdo
+Template Export). The code worked fine, and ran in a very small fraction
+of the time taken to run genisoimage and jigdo separately. The output
+.jigdo and .template files worked correctly, i.e. jigdo-file and the
+wrapper script jigdo-mirror accept them and would generate an ISO image
+that exactly matches the original.
 
-Debian used that code for a number of years within genisoimage, but we've since
-switched over to using xorriso instead for our image building instead. It has a
-lot of useful features that we want compared to genisoimage, not least a
-friendly and engaged author in Thomas Scmitt!
+Debian used that code for a number of years within genisoimage, but we've
+since switched over to using xorriso [2] instead for our image building
+instead. It has a lot of useful features that we want compared to
+genisoimage, not least a friendly and engaged author in Thomas Scmitt!
 
-Thomas and I and George Danchev worked together to package up my JTE code into
-libjte such that xorriso could use it effectively. Xorriso has been capable of
-generating jigdo files since 2010.
+[2] https://www.gnu.org/software/xorriso/
+
+Thomas and I and George Danchev worked together to package up my JTE code
+into libjte such that xorriso could use it effectively. Xorriso has been
+capable of generating jigdo files since 2010.
 
 In late 2019, I took over maintenance of the jigdo upstream code and added
 support for a new (v2) jigdo data format, using SHA256 instead of MD5
-internally. See my jigdo page for more details about that. I have also updated
-the JTE codebase to support this new format, of course.
+internally. See my jigdo page for more details about that. I have also
+updated the JTE codebase to support this new format, of course.
 
-As genisoimage is effectively dead at this point, I took the decision to not
-add the jigdo v2 support into the genisoimage codebase. If you need to generate
-jigdo v2 format, either use jigdo itself or xorriso if you'd like the
-performance benefit of the libjte integration.
+As genisoimage is effectively dead at this point, I took the decision to
+not add the jigdo v2 support into the genisoimage codebase. If you need to
+generate jigdo v2 format, either use jigdo itself or xorriso if you'd like
+the performance benefit of the libjte integration.
 
 JTE includes a few tools:
 
-  • jigit-mkimage, a simple and very fast tool to reconstruct image files from
-    .jigdo and .template files. It doesn't have any logic to cope with
-    downloading missing files, but will list the missing files that are needed.
-    It is also much faster for people (like me!) who already have full local
-    mirrors.
-  • parallel-sums is a simple extra utility to generate checksums quickly and
-    efficiently, reading file data only once and calculating checksums using
-    multiple algorithms in parallel using threads.
-  • jigsum, jigsum-sha256 and rsyncsum are checksum tools which will output
-    checksums in jigdo's base64-like format rather than the normal hexadecimal
-    format. Useful for debugging jigdo issues.
+  • jigit-mkimage, a simple and very fast tool to reconstruct image files
+    from .jigdo and .template files. It doesn't have any logic to cope
+    with downloading missing files, but will list the missing files that
+    are needed. It is also much faster for people (like me!) who already
+    have full local mirrors.
+  • parallel-sums is a simple extra utility to generate checksums quickly
+    and efficiently, reading file data only once and calculating checksums
+    using multiple algorithms in parallel using threads.
+  • jigsum, jigsum-sha256 and rsyncsum are checksum tools which will
+    output checksums in jigdo's base64-like format rather than the normal
+    hexadecimal format. Useful for debugging jigdo issues.
   • jigdump is a tool to dump the contents of a jigdo template or .iso.tmp
     file. Useful for debugging jigdo issues.
-  • mkjigsnap is a utility to help with maintaining the "snapshots" that jigdo
-    needs if you're going to be keeping data around for users in the long term.
-    We use this on some Debian systems.
+  • mkjigsnap is a utility to help with maintaining the "snapshots" that
+    jigdo needs if you're going to be keeping data around for users in the
+    long term. We use this on some Debian systems.
 
-Why the "jigit" name? The packages and source are named jigit to match the name
-of a long-dead wrapper script.
+Why the "jigit" name? The packages and source are named jigit to match the
+name of a long-dead wrapper script. That script may be gone, but it's
+easier to keep the name!
 
 ----------------------------------------------------------------------
 
@@ -90,333 +108,224 @@ The jigit source package (and hence the various binary packages it builds) is
 included in the main Debian archive, so your best bet is to get binary packages
 from there. Check for the current version(s) using tracker.debian.org).
 
-Source and backported versions are in the download area [1] alongside
+Source and backported versions are in the download area [3] alongside
 the current ChangeLog. All the files for download are PGP-signed for
-safety. You can find my keys online if you need them [2].
+safety. You can find my keys online if you need them [4].
 
-jigit is maintained in git [3].
+jigit is maintained in git [5].
 
-[1] https://www.einval.com/~steve/software/JTE/download/
-[2] https://www.einval.com/~steve/pgp/
-[3] https://git.einval.com/cgi-bin/gitweb.cgi?p=jigit.git.
+[3] https://www.einval.com/~steve/software/JTE/download/
+[4] https://www.einval.com/~steve/pgp/
+[5] https://git.einval.com/cgi-bin/gitweb.cgi?p=jigit.git.
 
 ----------------------------------------------------------------------
 
 How to use JTE
+--------------
 
-To use the jigdo creation code, specify the location of the output .jigdo and
-.template files alongside the ISO image. You can also specify the minimum size
-beneath which files will just be dropped into the binary template file data
-rather than listed as separate files to be found on the mirror, and exclude
-patterns to ignore certain files in the same way. And paths in the original
-filesystem can be mapped onto more global namespaces using the [Servers]
-section in the .jigdo file. For example:
+To use the jigdo creation code in xorriso, add some extra command line
+options to control the jigdo features. You must specify the location of
+the output .jigdo and .template files alongside the ISO image, and a
+"checksum" list file, containing the checksums that you want JTE to match.
+You can also specify a lot of other options to control the contents of the
+.jigdo file. A complicated (but realistic) example from my own test setup
+is here, with all the extra jigdo parameters explained below:
 
-genisoimage -J -r -o /home/steve/test1.iso \
-        -jigdo-jigdo /home/steve/test1.jigdo \
-        -jigdo-template /home/steve/test1.template \
-        -jigdo-min-file-size 16384 \
-        -jigdo-ignore "README*" \
-        -jigdo-force-md5 "/pool/" \
-        -jigdo-map Debian=/mirror/debian \
-        -md5-list /home/steve/md5.list \
-        /mirror/jigdo-test
+xorriso -as mkisofs -r -J \
+        -V 'Debian TEST amd64 n' \
+        -o debian-TEST-amd64-NETINST-1.iso \
+        -jigdo-jigdo debian-TEST-amd64-NETINST-1.jigdo \
+        -jigdo-template debian-TEST-amd64-NETINST-1.template \
+        -checksum_algorithm_iso sha256,sha512 \
+        -checksum-list /tmp/buster/checksum-check \
+        -jigdo-checksum-algorithm md5 \
+        -jigdo-force-checksum /pool/ \
+        -jigdo-min-file-size 1024 \
+        -jigdo-exclude 'README*' \
+        -jigdo-exclude /doc/ \
+        -jigdo-exclude /md5sum.txt \
+        -jigdo-exclude /.disk/ \
+        -jigdo-exclude /pics/ \
+        -jigdo-exclude 'Release*' \
+        -jigdo-exclude 'Packages*' \
+        -jigdo-exclude 'Sources*' \
+        -jigdo-exclude boot1 \
+        -jigdo-map Debian=/scratch/mirror/debian/ \
+        -joliet-long -cache-inodes \
+        -isohybrid-mbr syslinux/usr/lib/ISOLINUX/isohdpfx.bin \
+        -b isolinux/isolinux.bin \
+        -c isolinux/boot.cat \
+        -boot-load-size 4 \
+        -boot-info-table -no-emul-boot \
+        -eltorito-alt-boot -e boot/grub/efi.img \
+        -no-emul-boot -isohybrid-gpt-basdat \
+        -isohybrid-apm-hfsplus boot1 CD1
 
-If the -jigdo-* options are not used, the normal genisoimage execution path is
-not affected at all. The above invocation will create 3 output files (.iso,
-.jigdo and .template). Multiple -jigdo-ignore and -jigdo-map options are
-accepted, for multiple ignore and map patterns.
+That's a long command line, but it's not too hard to follow:
 
-Use the -md5-list option to specify the location of a list of files and their
-md5sums in normal md5sum format. genisoimage will then compare the checksum of
-each file it is asked to write against the checksum of that file in the list.
-It will abort on any mismatches. The MD5 list file must list all the files that
-are expected to be found and listed in the output .jigdo file. The
--jigdo-force-md5 option specifies a path where all files are expected to have
-an MD5 entry (e.g. /pool/). Then if any files do not have a match, they must
-have been corrupted and genisoimage will abort.
+  • -jigdo-jigdo specifies the output filename for the .jigdo file
+  • -jigdo-template specifies the output filename for the .template file
+  • -checksum_algorithm_iso specifies which checksums to include for the
+    ISO image inside the .jigdo file
+  • -checksum-list specifies the input filename for the checksum data that
+    JTE needs
+  • -jigdo-checksum-algorithm specifies which checksum algorithm to use
+    inside the jigdo file, both for describing the files in the ISO and
+    the ISO itself. The allowed options are "md5" (i.e. jigdo format v1,
+    the default), or "sha256" (i.e. jigdo format v2).
+  • -jigdo-force-checksumadds a match pattern for the jigdo generation
+    code - all files matching this pattern must be listed in the
+    checksum-list, and they mush have the correct checksum. This is used
+    in Debian as a precaution that the source data is correct for all the
+    packages we're including on our media.
+  • -jigdo-min-file-size and -jigdo-exclude are two different ways to stop
+    certain files from being matched in the jigdo generation code. We
+    don't want to waste time on files that are too small, or too temporary
+    (e.g. generated during the CD build process itself), or that are not
+    tracked cleanly with versions inside the Debian archive. Files
+    excluded from the jigdo generation using these parameters will
+    therefore be included directly in the .template raw data section.
+  • Finally, one or more -jigdo-map entries should be added, to map
+    pathnames in the .jigdo file to the [Servers] section.
+
+If the -jigdo-* options are not used, the normal xorriso execution path is
+not affected at all. The above invocation will create 3 output files
+(.iso, .jigdo and .template). Multiple -jigdo-exclude and -jigdo-map
+options are accepted, for multiple exclude and map patterns.
 
 ----------------------------------------------------------------------
 
 How JTE works
+-------------
 
-I hooked all the places in genisoimage where it will normally write image data.
-All the normal data write calls (directory entries etc.) I simply copy through
-and build into the template file. Any file data entries are instead passed
-through with information about the original file. If that file is large enough
-(see -jigdo-min-file-size above), I grab the filename and the MD5 of the file's
-data. If that MD5, size and length match an entry in the md5-list, I can just
-write a file match record into the template file (and then the jigdo file)
-instead of the file data itself.
+Internally in libisoburn (and hence xorriso), in all the places where it
+will write image data it will also call into libjte to offer that image
+data for jigdo processing. Any file data entries are passed through with
+information about the original file. If that file is not excluded (because
+of its path or size, as mentioned), JTE will grab the filename, the size
+of the file and the checksum of the file's data. If that checksum, size
+and length match an entry in the input checksum-list, JTE will write a
+file match record into the template file (and then the jigdo file) instead
+of the file data itself. For anything else (excluded files, directory
+data, etc.), raw data is simply copied through and compressed into the
+template file.
 
 ----------------------------------------------------------------------
 
 How to use jigit-mkimage
+------------------------
 
-jigit-mkimage is a faster, more minimal version of "jigdo-file make-image",
-written in portable C. It takes a few options:
+jigit-mkimage is a faster, more minimal version of "jigdo-file
+make-image", written in portable C. It takes a few options:
 
-┌─────────┬─────────────────────────────────────────────────────────────┐
-│-f <MD5   │Specify a file containing MD5sums for files we should attempt to   │
-│file>     │use when rebuilding the image                                      │
-├─────────┼─────────────────────────────────────────────────────────────┤
-│-j <jigdo │Specify the input jigdo file                                       │
-│file>     │                                                                   │
-├─────────┼─────────────────────────────────────────────────────────────┤
-│-t        │                                                                   │
-│<template │Specify the input template file                                    │
-│file>     │                                                                   │
-├─────────┼─────────────────────────────────────────────────────────────┤
-│-m <item= │Map <item> to <path> to find the files in the mirror               │
-│path>     │                                                                   │
-├─────────┼─────────────────────────────────────────────────────────────┤
-│-M        │Don't attempt to build the image; just verify that all the         │
-│<Missing  │components needed are available. If some are missing, list them in │
-│file>     │the specified file.                                                │
-├─────────┼─────────────────────────────────────────────────────────────┤
-│-v        │Make the output logging more verbose.                              │
-├─────────┼─────────────────────────────────────────────────────────────┤
-│-l <log   │Specify a logfile. If not specified, will log to stderr just like  │
-│file>     │genisoimage                                                        │
-├─────────┼─────────────────────────────────────────────────────────────┤
-│          │Don't bother checking md5sums of the input files, or of the output │
-│-q        │image.                                                             │
-│          │WARNING: this may lead to corrupt images, but is much faster.      │
-├─────────┼─────────────────────────────────────────────────────────────┤
-│-s <start │Specify where to start in the image (in bytes). If not specified,  │
-│offset>   │will start at the beginning (offset 0). Added for iso-image.pl use │
-├─────────┼─────────────────────────────────────────────────────────────┤
-│-e <end   │Specify where to end in the image (in bytes). If not specified,    │
-│offset>   │will run all the way to the end of the image. Added for            │
-│          │iso-image.pl use                                                   │
-├─────────┼─────────────────────────────────────────────────────────────┤
-│          │Don't attempt to reassemble the image; simply parse the image      │
-│-z        │descriptor in the template file and print the image size. Added for│
-│          │iso-image.pl use                                                   │
-└─────────┴─────────────────────────────────────────────────────────────┘
+┌─────────┬──────────────────────────────────────────────────────────────┐
+│-f <MD5  │Specify a file containing MD5sums for files we should attempt │
+│file>    │to use when rebuilding the image                              │
+├─────────┼──────────────────────────────────────────────────────────────┤
+│-F       │Specify a file containing SHA256sums for files we should      │
+│<SHA256  │attempt to use when rebuilding the image                      │
+│file>    │                                                              │
+├─────────┼──────────────────────────────────────────────────────────────┤
+│-j <jigdo│Specify the input jigdo file                                  │
+│file>    │                                                              │
+├─────────┼──────────────────────────────────────────────────────────────┤
+│-t       │                                                              │
+│<template│Specify the input template file                               │
+│file>    │                                                              │
+├─────────┼──────────────────────────────────────────────────────────────┤
+│-m <item=│Map <item> to <path> to find the files in the mirror          │
+│path>    │                                                              │
+├─────────┼──────────────────────────────────────────────────────────────┤
+│-M       │Don't attempt to build the image; just verify that all the    │
+│<Missing │components needed are available. If some are missing, list    │
+│file>    │them in the specified file.                                   │
+├─────────┼──────────────────────────────────────────────────────────────┤
+│-v       │Make the output logging more verbose.                         │
+├─────────┼──────────────────────────────────────────────────────────────┤
+│-l <log  │Specify a logfile. If not specified, will log to stderr just  │
+│file>    │like genisoimage                                              │
+├─────────┼──────────────────────────────────────────────────────────────┤
+│         │Don't bother checking checksums of the input files, or of the │
+│-q       │output image.                                                 │
+│         │WARNING: this may lead to corrupt images, but is faster as    │
+│         │less work is done.                                            │
+├─────────┼──────────────────────────────────────────────────────────────┤
+│-s <start│Specify where to start in the image (in bytes). If not        │
+│offset>  │specified, will start at the beginning (offset 0). Added for  │
+│         │iso-image.pl use                                              │
+├─────────┼──────────────────────────────────────────────────────────────┤
+│-e <end  │Specify where to end in the image (in bytes). If not          │
+│offset>  │specified, will run all the way to the end of the image. Added│
+│         │for iso-image.pl use                                          │
+├─────────┼──────────────────────────────────────────────────────────────┤
+│         │Don't attempt to reassemble the image; simply parse the image │
+│-z       │descriptor in the template file and print the image size.     │
+│         │Added for iso-image.pl use                                    │
+└─────────┴──────────────────────────────────────────────────────────────┘
 
-Specifying a start or end offset implies -q - it's difficult to check MD5 sums
-if the full image is not generated!
+Specifying a start or end offset implies -q - it's difficult to check
+checksums if the full image is not generated!
 
 ----------------------------------------------------------------------
 
 (Dead) experiments
 ------------------
 
-I had extra plans for JTE that never really came to fruition due to a lack of
-time and energy... :-/ Check git history if you're interested.
+I had extra plans for JTE that never really came to fruition due to a lack
+of time and energy... :-/ Check git history if you're interested.
 
-* iso-image.pl - on-the-fly rebuild of ISO images for HTTP
+iso-image.pl - on-the-fly rebuild of ISO images for HTTP
 
-iso-image.pl was a small perl wrapper script written to drive mkimage and turn
-it into a CGI. It would parse the incoming request (including byte-ranges) and
-call jigit-mkimage to actually generate the image pieces wanted.
+iso-image.pl was a small perl wrapper script written to drive mkimage and
+turn it into a CGI. It would parse the incoming request (including
+byte-ranges) and call jigit-mkimage to actually generate the image pieces
+wanted.
 
-This code worked, but was always too slow for production use. Each CGI request
-needed to index into the ISO image independently, leading to lots and lots of
-overlapping calls to decompress the template data.
+This code worked, but was always too slow for production use. Each CGI
+request needed to index into the ISO image independently, leading to lots
+and lots of overlapping calls to decompress the template data.
 
-* jigdoofus - a better way to do on-the-fly assembly
+jigdoofus - a better way to do on-the-fly assembly
 
-I started on a new project, creating a FUSE-based filesystem that would rebuild
-ISOs on the fly. I decided to use a database backend and a caching system to
-solve the problem of the repetitive decompression that stopped iso-image.pl. I
-made some progress, but ran out of steam. Code is still in the "jigdoofus"
-branch in git in case anybody ever finds it useful.
+I started on a new project, creating a FUSE-based filesystem that would
+rebuild ISOs on the fly. I decided to use a database backend and a caching
+system to solve the problem of the repetitive decompression that stopped
+iso-image.pl. I made some progress, but ran out of steam. Code is still in
+the "jigdoofus" branch in git in case anybody ever finds it useful.
 
-* jigit - a friendly wrapper for jigit-mkimage
+jigit - a friendly wrapper for jigit-mkimage
 
-Similarly to the jigdo-lite script in the jigdo package, I wanted to provide a
-nicer user experience for easy downloading of Debian and Ubuntu CD images. It
-worked, but never really gained much traction. It needed much more effort to
-make things reliable for production use.
+Similarly to the jigdo-lite script in the jigdo package, I wanted to
+provide a nicer user experience for easy downloading of Debian and Ubuntu
+CD images. It worked, but never really gained much traction. It needed
+much more effort to make things reliable for production use.
 
 ----------------------------------------------------------------------
 
 External integration
 --------------------
 
-* debian-cd
+debian-cd
 
-The debian-cd package in Debian is what we use to generate installer CDs and
-DVDs. It has supported JTE since 2005, and we still use it every day.
+The debian-cd package in Debian is what we use to generate installer CDs
+and DVDs. It has supported JTE since 2005, and we still use it every day.
 
-* cdrkit/genisoimage
+cdrkit/genisoimage
 
-genisoimage in Debian shipped with integrated JTE code for a long time, but is
-basically dead upstream. Not recommended for use any more.
+genisoimage in Debian shipped with integrated JTE code for a long time,
+but is basically dead upstream. Not recommended for use any more.
 
-* xorriso
+xorriso
 
-xorriso uses libjte to generate jigdo and template files, and has worked this
-way since 2010.
+xorriso uses libjte to generate jigdo and template files, and has worked
+this way since 2010.
 
 ----------------------------------------------------------------------
 
 What's left to do?
 ------------------
 
- 1. Testing! :-) This is where you lot come in! Please play with this some more
-    and let me know if you have any problems, especially with data corruption.
+ 1. Testing! :-) This is where you lot come in! Please play with this some
+    more and let me know if you have any problems, especially with data
+    corruption.
  2. More documentation.
-
-
-
-
-----------------------------------------------------------------------
-
-How to use JTE
-
-To use the jigdo creation code, specify the location of the output .jigdo and
-.template files alongside the ISO image. You can also specify the minimum size
-beneath which files will just be dropped into the binary template file data
-rather than listed as separate files to be found on the mirror, and exclude
-patterns to ignore certain files in the same way. And paths in the original
-filesystem can be mapped onto more global namespaces using the [Servers]
-section in the .jigdo file. For example:
-
-genisoimage -J -r -o /home/steve/test1.iso \
-        -jigdo-jigdo /home/steve/test1.jigdo \
-        -jigdo-template /home/steve/test1.template \
-        -jigdo-min-file-size 16384 \
-        -jigdo-ignore "README*" \
-        -jigdo-force-md5 "/pool/" \
-        -jigdo-map Debian=/mirror/debian \
-        -md5-list /home/steve/md5.list \
-        /mirror/jigdo-test
-
-If the -jigdo-* options are not used, the normal genisoimage execution path is
-not affected at all. The above invocation will create 3 output files (.iso,
-.jigdo and .template). Multiple -jigdo-ignore and -jigdo-map options are
-accepted, for multiple ignore and map patterns.
-
-Use the -md5-list option to specify the location of a list of files and their
-md5sums in normal md5sum format. genisoimage will then compare the checksum of
-each file it is asked to write against the checksum of that file in the list.
-It will abort on any mismatches. The MD5 list file must list all the files that
-are expected to be found and listed in the output .jigdo file. The
--jigdo-force-md5 option specifies a path where all files are expected to have
-an MD5 entry (e.g. /pool/). Then if any files do not have a match, they must
-have been corrupted and genisoimage will abort.
-
-----------------------------------------------------------------------
-
-How JTE works
-
-I hooked all the places in genisoimage where it will normally write image data.
-All the normal data write calls (directory entries etc.) I simply copy through
-and build into the template file. Any file data entries are instead passed
-through with information about the original file. If that file is large enough
-(see -jigdo-min-file-size above), I grab the filename and the MD5 of the file's
-data. If that MD5, size and length match an entry in the md5-list, I can just
-write a file match record into the template file (and then the jigdo file)
-instead of the file data itself.
-
-----------------------------------------------------------------------
-
-How to use jigit-mkimage
-
-jigit-mkimage is a faster, more minimal version of "jigdo-file make-image",
-written in portable C. It takes a few options:
-
-┌─────────┬───────────────────────────────────────────────────────────────────┐
-│-f <MD5  │Specify a file containing MD5sums for files we should attempt to   │
-│file>    │use when rebuilding the image                                      │
-├─────────┼───────────────────────────────────────────────────────────────────┤
-│-j <jigdo│Specify the input jigdo file                                       │
-│file>    │                                                                   │
-├─────────┼───────────────────────────────────────────────────────────────────┤
-│-t       │                                                                   │
-│<template│Specify the input template file                                    │
-│file>    │                                                                   │
-├─────────┼───────────────────────────────────────────────────────────────────┤
-│-m <item=│Map <item> to <path> to find the files in the mirror               │
-│path>    │                                                                   │
-├─────────┼───────────────────────────────────────────────────────────────────┤
-│-M       │Don't attempt to build the image; just verify that all the         │
-│<Missing │components needed are available. If some are missing, list them in │
-│file>    │the specified file.                                                │
-├─────────┼───────────────────────────────────────────────────────────────────┤
-│-v       │Make the output logging more verbose.                              │
-├─────────┼───────────────────────────────────────────────────────────────────┤
-│-l <log  │Specify a logfile. If not specified, will log to stderr just like  │
-│file>    │genisoimage                                                        │
-├─────────┼───────────────────────────────────────────────────────────────────┤
-│         │Don't bother checking md5sums of the input files, or of the output │
-│-q       │image.                                                             │
-│         │WARNING: this may lead to corrupt images, but is much faster.      │
-├─────────┼───────────────────────────────────────────────────────────────────┤
-│-s <start│Specify where to start in the image (in bytes). If not specified,  │
-│offset>  │will start at the beginning (offset 0). Added for iso-image.pl use │
-├─────────┼───────────────────────────────────────────────────────────────────┤
-│-e <end  │Specify where to end in the image (in bytes). If not specified,    │
-│offset>  │will run all the way to the end of the image. Added for            │
-│         │iso-image.pl use                                                   │
-├─────────┼───────────────────────────────────────────────────────────────────┤
-│         │Don't attempt to reassemble the image; simply parse the image      │
-│-z       │descriptor in the template file and print the image size. Added for│
-│         │iso-image.pl use                                                   │
-└─────────┴───────────────────────────────────────────────────────────────────┘
-
-Specifying a start or end offset implies -q - it's difficult to check MD5 sums
-if the full image is not generated!
-
-----------------------------------------------------------------------
-
-(Dead) experiments
-
-I had extra plans for JTE that never really came to fruition due to a lack of
-time and energy... :-/ Check git history if you're interested.
-
-iso-image.pl - on-the-fly rebuild of ISO images for HTTP
-
-iso-image.pl was a small perl wrapper script written to drive mkimage and turn
-it into a CGI. It would parse the incoming request (including byte-ranges) and
-call jigit-mkimage to actually generate the image pieces wanted.
-
-This code worked, but was always too slow for production use. Each CGI request
-needed to index into the ISO image independently, leading to lots and lots of
-overlapping calls to decompress the template data.
-
-jigdoofus - a better way to do on-the-fly assembly
-
-I started on a new project, creating a FUSE-based filesystem that would rebuild
-ISOs on the fly. I decided to use a database backend and a caching system to
-solve the problem of the repetitive decompression that stopped iso-image.pl. I
-made some progress, but ran out of steam. Code is still in the "jigdoofus"
-branch in git in case anybody ever finds it useful.
-
-jigit - a friendly wrapper for jigit-mkimage
-
-Similarly to the jigdo-lite script in the jigdo package, I wanted to provide a
-nicer user experience for easy downloading of Debian and Ubuntu CD images. It
-worked, but never really gained much traction. It needed much more effort to
-make things reliable for production use.
-
-----------------------------------------------------------------------
-
-External integration
-
-debian-cd
-
-The debian-cd package in Debian is what we use to generate installer CDs and
-DVDs. It has supported JTE since 2005, and we still use it every day.
-
-cdrkit/genisoimage
-
-genisoimage in Debian shipped with integrated JTE code for a long time, but is
-basically dead upstream. Not recommended for use any more.
-
-xorriso
-
-xorriso uses libjte to generate jigdo and template files, and has worked this
-way since 2010.
-
-----------------------------------------------------------------------
-
-What's left to do?
-
- 1. Testing! :-) This is where you lot come in! Please play with this some more
-    and let me know if you have any problems, especially with data corruption.
- 2. More documentation.
-
