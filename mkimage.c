@@ -22,6 +22,8 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <stdint.h>
+#include <time.h>
+#include <sys/time.h>
 #include "endian.h"
 #include "jig-base64.h"
 #include "md5.h"
@@ -959,6 +961,18 @@ static int parse_file_block_sha256(INT64 offset, INT64 data_size, INT64 file_siz
     return ENOENT;
 }
 
+static void get_time(double *newtime)
+{
+    struct timeval tv;
+    struct timezone tz;
+
+    tz.tz_minuteswest = 0;
+    tz.tz_dsttime = 0;
+
+    gettimeofday(&tv, &tz);
+    *newtime = (double)tv.tv_sec + ((double)tv.tv_usec / 1000000);
+}
+
 static int parse_template_file(char *filename, int sizeonly, char *missing, char *output_name)
 {
     INT64 template_offset = 0;
@@ -980,6 +994,8 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
     unsigned char image_sha256sum[SHA256_BYTES];
     unsigned char image_md5sum_from_tmpl[MD5_BYTES];
     unsigned char image_sha256sum_from_tmpl[SHA256_BYTES];
+    double start_time;
+    double end_time;
 
     zip_state.total_offset = 0;
     
@@ -997,6 +1013,8 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
         fclose(file);
         return ENOMEM;
     }
+
+    get_time(&start_time);
 
     /* Find the beginning of the desc block */
     file_size = get_file_size(filename);
@@ -1281,6 +1299,14 @@ static int parse_template_file(char *filename, int sizeonly, char *missing, char
             }
         }
         fprintf(logfile, "Output image length is %lld bytes\n", written_length);
+
+        if (verbose)
+        {
+            get_time(&end_time);
+            end_time -= start_time;
+            fprintf(logfile, "  Image creation iook %.2f seconds, (%.2f MB/s)\n",
+                    end_time, (written_length / 1000000 / end_time));
+        }
     }
     
     return 0;
